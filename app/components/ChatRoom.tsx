@@ -3,7 +3,10 @@ import { useEffect, useState } from 'react'
 import { useSupabaseClient } from '@supabase/auth-helpers-react'
 import type { Session } from '@supabase/auth-helpers-react'
 import Image from "next/image"
+import EmojiPicker from 'emoji-picker-react'
+import { EmojiClickData } from 'emoji-picker-react'
 import ChannelList from './ChannelList'
+import UserList from './UserList'
 
 interface Message {
   id: number
@@ -26,11 +29,17 @@ interface ChatRoomProps {
   session: Session
 }
 
+
 export default function ChatRoom({ session }: ChatRoomProps) {
   const supabase = useSupabaseClient()
   const [messages, setMessages] = useState<Message[]>([])
   const [newMessage, setNewMessage] = useState('')
   const [currentChannel, setCurrentChannel] = useState<Channel | null>(null)
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false)
+  const handleEmojiClick = (emojiObject: EmojiClickData) => {
+    setNewMessage((prevMsg) => prevMsg + emojiObject.emoji)
+    setShowEmojiPicker(false)
+  }
 
   useEffect(() => {
     fetchDefaultChannel()
@@ -179,14 +188,21 @@ export default function ChatRoom({ session }: ChatRoomProps) {
       </header>
 
       <div className="flex flex-1 overflow-hidden">
-        <div className="w-64 border-r">
-          <ChannelList
-            currentChannel={currentChannel}
-            onChannelSelect={setCurrentChannel}
-            session={session}
-          />
+        {/* Left sidebar - Channels and Users */}
+        <div className="flex w-64 flex-col border-r">
+          <div className="flex-shrink-0">
+            <ChannelList
+              currentChannel={currentChannel}
+              onChannelSelect={setCurrentChannel}
+              session={session}
+            />
+          </div>
+          <div className="flex-shrink-0 border-t">
+            <UserList session={session} />
+          </div>
         </div>
 
+        {/* Main chat area */}
         <div className="flex flex-1 flex-col">
           {currentChannel && (
             <div className="border-b p-4">
@@ -223,14 +239,31 @@ export default function ChatRoom({ session }: ChatRoomProps) {
 
           <form onSubmit={sendMessage} className="border-t p-4">
             <div className="flex space-x-4">
-              <input
-                type="text"
-                value={newMessage}
-                onChange={(e) => setNewMessage(e.target.value)}
-                placeholder={currentChannel ? `Message #${currentChannel.name}` : 'Select a channel'}
-                disabled={!currentChannel}
-                className="flex-1 rounded-lg border bg-transparent px-4 py-2 focus:border-blue-500 focus:outline-none dark:border-gray-700"
-              />
+              <div className="relative flex-1">
+                <input
+                  type="text"
+                  value={newMessage}
+                  onChange={(e) => setNewMessage(e.target.value)}
+                  placeholder={currentChannel ? `Message #${currentChannel.name}` : 'Select a channel'}
+                  disabled={!currentChannel}
+                  className="w-full rounded-lg border bg-transparent px-4 py-2 focus:border-blue-500 focus:outline-none dark:border-gray-700"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 p-2 text-gray-500 hover:text-gray-700"
+                >
+                  😊
+                </button>
+                {showEmojiPicker && (
+                  <div className="absolute bottom-full right-0 mb-2">
+                    <EmojiPicker
+                      onEmojiClick={handleEmojiClick}
+                      lazyLoadEmojis={true}
+                    />
+                  </div>
+                )}
+              </div>
               <button
                 type="submit"
                 disabled={!currentChannel}

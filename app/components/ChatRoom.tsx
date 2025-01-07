@@ -1,4 +1,11 @@
 'use client'
+declare global {
+  interface Window {
+    statusTimeout?: NodeJS.Timeout;
+  }
+}
+
+
 import { useEffect, useState } from 'react'
 import { useSupabaseClient } from '@supabase/auth-helpers-react'
 import type { Session } from '@supabase/auth-helpers-react'
@@ -36,6 +43,7 @@ export default function ChatRoom({ session }: ChatRoomProps) {
   const [newMessage, setNewMessage] = useState('')
   const [currentChannel, setCurrentChannel] = useState<Channel | null>(null)
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
+  const [userStatus, setUserStatus] = useState<'active' | 'idle' | 'offline'>('idle')
   const handleEmojiClick = (emojiObject: EmojiClickData) => {
     setNewMessage((prevMsg) => prevMsg + emojiObject.emoji)
     setShowEmojiPicker(false)
@@ -66,6 +74,56 @@ export default function ChatRoom({ session }: ChatRoomProps) {
       supabase.removeChannel(channel)
     }
   }, [currentChannel])
+
+  useEffect(() => {
+    let lastActive = new Date()
+    let checkInterval: NodeJS.Timeout
+  
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        // Start checking when page is hidden
+        checkInterval = setInterval(async () => {
+          const timeSinceActive = new Date().getTime() - lastActive.getTime()
+          if (timeSinceActive >= 5000) { // 5 seconds
+            await supabase
+              .from('user_status')
+              .upsert({
+                user_id: session.user.id,
+                email: session.user.email,
+                last_seen: new Date().toISOString(),
+                status: 'idle'
+              })
+              .select()
+            clearInterval(checkInterval)
+          }
+        }, 1000)
+      } else {
+        // Clear check interval when page becomes visible
+        if (checkInterval) {
+          clearInterval(checkInterval)
+        }
+        lastActive = new Date()
+      }
+    }
+  
+    // Update lastActive timestamp on user activity
+    const updateLastActive = () => {
+      lastActive = new Date()
+    }
+  
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    document.addEventListener('mousemove', updateLastActive)
+    document.addEventListener('keydown', updateLastActive)
+    document.addEventListener('click', updateLastActive)
+  
+    return () => {
+      if (checkInterval) clearInterval(checkInterval)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+      document.removeEventListener('mousemove', updateLastActive)
+      document.removeEventListener('keydown', updateLastActive)
+      document.removeEventListener('click', updateLastActive)
+    }
+  }, [session, supabase])
 
   const fetchDefaultChannel = async () => {
     // First try to get the general channel
@@ -137,30 +195,54 @@ export default function ChatRoom({ session }: ChatRoomProps) {
     setMessages(data || [])
 }
 
-  const sendMessage = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!newMessage.trim() || !currentChannel) return
+const sendMessage = async (e: React.FormEvent) => {
+  e.preventDefault()
+  if (!newMessage.trim() || !currentChannel) return
 
-    const { error } = await supabase
-      .from('messages')
-      .insert([
-        {
-          content: newMessage,
-          user_id: session.user.id,
-          username: session.user.email,
-          channel_id: currentChannel.id
-        }
-      ])
+  // Update status to active
+  await supabase
+    .from('user_status')
+    .upsert({
+      user_id: session.user.id,
+      email: session.user.email,
+      last_seen: new Date().toISOString(),
+      status: 'active'
+    })
+    .select()
 
-    if (error) {
-      console.error('Error sending message:', error)
-      return
-    }
-    setNewMessage('')
+  const { error } = await supabase
+    .from('messages')
+    .insert([
+      {
+        content: newMessage,
+        user_id: session.user.id,
+        username: session.user.email,
+        channel_id: currentChannel.id
+      }
+    ])
+
+  if (error) {
+    console.error('Error sending message:', error)
+    return
   }
+  setNewMessage('')
+}
 
   const handleLogout = async () => {
-    await supabase.auth.signOut()
+    try {
+      await supabase
+        .from('user_status')
+        .upsert({
+          user_id: session.user.id,
+          email: session.user.email,
+          last_seen: new Date().toISOString(),
+          status: 'offline'
+        })
+        .select()
+      await supabase.auth.signOut()
+    } catch (error) {
+      console.error('Error during logout:', error)
+    }
   }
 
   return (
@@ -240,10 +322,28 @@ export default function ChatRoom({ session }: ChatRoomProps) {
           <form onSubmit={sendMessage} className="border-t p-4">
             <div className="flex space-x-4">
               <div className="relative flex-1">
-                <input
+              <input
                   type="text"
                   value={newMessage}
-                  onChange={(e) => setNewMessage(e.target.value)}
+                  onChange={async (e) => {
+                    setNewMessage(e.target.value)
+                    
+                    // Update database with active status
+                    await supabase
+                      .from('user_status')
+                      .upsert({
+                        user_id: session.user.id,
+                        email: session.user.email,
+                        last_seen: new Date().toISOString(),
+                        status: 'active'
+                      })
+                      .select()
+
+                    // Clear any existing timeout
+                    if (window.statusTimeout) {
+                      clearTimeout(window.statusTimeout)
+                    }
+                  }}
                   placeholder={currentChannel ? `Message #${currentChannel.name}` : 'Select a channel'}
                   disabled={!currentChannel}
                   className="w-full rounded-lg border bg-transparent px-4 py-2 focus:border-blue-500 focus:outline-none dark:border-gray-700"

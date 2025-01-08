@@ -2,14 +2,7 @@
 import { useState, useEffect } from 'react'
 import { useSupabaseClient } from '@supabase/auth-helpers-react'
 import type { Session } from '@supabase/auth-helpers-react'
-
-interface Channel {
-  id: number
-  name: string
-  description?: string
-  created_by: string
-  created_at: string
-}
+import { Channel } from './types'
 
 interface ChannelListProps {
   currentChannel: Channel | null
@@ -17,11 +10,7 @@ interface ChannelListProps {
   session: Session
 }
 
-export default function ChannelList({ 
-  currentChannel, 
-  onChannelSelect,
-  session 
-}: ChannelListProps) {
+export default function ChannelList({ currentChannel, onChannelSelect, session }: ChannelListProps) {
   const supabase = useSupabaseClient()
   const [channels, setChannels] = useState<Channel[]>([])
   const [newChannelName, setNewChannelName] = useState('')
@@ -37,6 +26,7 @@ export default function ChannelList({
         schema: 'public',
         table: 'channels'
       }, () => {
+        console.log('Channel change detected, refreshing list')
         fetchChannels()
       })
       .subscribe()

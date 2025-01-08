@@ -35,6 +35,15 @@ export default function ChatRoom({ session }: ChatRoomProps) {
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
   const [chatContext, setChatContext] = useState<ChatContext>({ type: 'channel' })
   const [userStatus, setUserStatus] = useState<'active' | 'idle' | 'offline'>('idle')
+  const [notification, setNotification] = useState<{
+    message: string;
+    type: 'success' | 'error';
+  } | null>(null);
+
+  const showNotification = (message: string, type: 'success' | 'error') => {
+    setNotification({ message, type });
+    setTimeout(() => setNotification(null), 3000);
+  };
 
   useEffect(() => {
     fetchDefaultChannel()
@@ -133,20 +142,65 @@ export default function ChatRoom({ session }: ChatRoomProps) {
     }
   }, [session, supabase])
 
-  const fetchDefaultChannel = async () => {
+const fetchDefaultChannel = async () => {
+  try {
     const { data, error } = await supabase
       .from('channels')
       .select()
       .eq('name', 'general')
-      .single()
+      .single();
     
-    if (!error && data) {
+    if (error) {
+      console.log('Error fetching general channel:', error);
+      // If we can't find general channel, try to get any channel
+      const { data: anyChannel, error: anyError } = await supabase
+        .from('channels')
+        .select()
+        .limit(1)
+        .single();
+
+      if (anyError) {
+        console.log('Error fetching any channel:', anyError);
+        // If no channels exist, create general channel
+        const { data: newChannel, error: createError } = await supabase
+          .from('channels')
+          .insert([
+            {
+              name: 'general',
+              description: 'General discussion',
+              created_by: session.user.id
+            }
+          ])
+          .select()
+          .single();
+
+        if (createError) {
+          console.error('Error creating general channel:', createError);
+          return;
+        }
+
+        setChatContext({
+          type: 'channel',
+          channel: newChannel
+        });
+        return;
+      }
+
       setChatContext({
         type: 'channel',
-        channel: data
-      })
+        channel: anyChannel
+      });
+      return;
     }
+
+    setChatContext({
+      type: 'channel',
+      channel: data
+    });
+  } catch (error) {
+    console.error('Error in fetchDefaultChannel:', error);
   }
+}
 
   const fetchMessages = async (channelId: number) => {
     const { data, error } = await supabase
@@ -246,6 +300,89 @@ export default function ChatRoom({ session }: ChatRoomProps) {
   const sendMessage = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!newMessage.trim()) return
+  
+    console.log('Message received:', newMessage.trim()); // Debug log
+  
+    // Handle clear command
+    if (newMessage.trim() === '/clear') {
+      console.log('Clear command detected'); // Debug log
+      try {
+        if (chatContext.type === 'channel') {
+          console.log('Clearing channel...'); // Debug log
+          // Check if user is admin
+          const { data: userData } = await supabase
+            .from('user_status')
+            .select('email')
+            .eq('user_id', session.user.id)
+            .single();
+  
+          console.log('User data:', userData); // Debug log
+  
+          if (userData?.email !== 'cordwell@gmail.com') {
+            showNotification('Only admin can delete channels', 'error');
+            return;
+          }
+  
+          // Delete messages first
+          const { error: messagesError } = await supabase
+            .from('messages')
+            .delete()
+            .eq('channel_id', chatContext.channel!.id);
+  
+          console.log('Messages deletion result:', messagesError); // Debug log
+  
+          // Then delete channel
+          const { error: channelError } = await supabase
+            .from('channels')
+            .delete()
+            .eq('id', chatContext.channel!.id);
+  
+          console.log('Channel deletion result:', channelError); // Debug log
+  
+          if (messagesError || channelError) {
+            showNotification('Error clearing channel', 'error');
+            return;
+          }
+  
+          // Reset to general channel
+          await fetchDefaultChannel();
+          showNotification('Channel cleared successfully', 'success');
+        } 
+        else if (chatContext.type === 'dm') {
+          console.log('Clearing DM...'); // Debug log
+          // Delete messages first
+          const { error: messagesError } = await supabase
+            .from('dm_messages')
+            .delete()
+            .eq('dm_channel_id', chatContext.dmChannel!.id);
+  
+          console.log('DM messages deletion result:', messagesError); // Debug log
+  
+          // Then delete DM channel
+          const { error: channelError } = await supabase
+            .from('dm_channels')
+            .delete()
+            .eq('id', chatContext.dmChannel!.id);
+  
+          console.log('DM channel deletion result:', channelError); // Debug log
+  
+          if (messagesError || channelError) {
+            showNotification('Error clearing DM conversation', 'error');
+            return;
+          }
+  
+          // Reset to default channel
+          await fetchDefaultChannel();
+          showNotification('DM conversation cleared successfully', 'success');
+        }
+        setNewMessage(''); // Clear input after successful clear
+        return;
+      } catch (error) {
+        console.error('Error clearing conversation:', error);
+        showNotification('Error clearing conversation', 'error');
+        return;
+      }
+    }
 
     if (chatContext.type === 'channel' && chatContext.channel) {
       const { error } = await supabase
@@ -282,7 +419,7 @@ export default function ChatRoom({ session }: ChatRoomProps) {
           return;
         }
     
-        console.log('Found DM channel:', channelCheck);
+        //console.log('Found DM channel:', channelCheck);
     
         // Split into separate update and message operations
         const updateResult = await supabase
@@ -293,7 +430,7 @@ export default function ChatRoom({ session }: ChatRoomProps) {
         })
         .match({ id: channelCheck.id }); // Use match instead of eq
       
-      console.log('Update operation result:', updateResult);
+      //console.log('Update operation result:', updateResult);
     
         // If update succeeded, send the message
         if (updateResult.error) {
@@ -324,7 +461,7 @@ export default function ChatRoom({ session }: ChatRoomProps) {
           .eq('id', channelCheck.id)
           .single();
     
-        console.log('Channel after update:', updatedChannel);
+      //  console.log('Channel after update:', updatedChannel);
     
       } catch (error) {
         console.error('Error in DM handling:', error);
@@ -358,6 +495,13 @@ export default function ChatRoom({ session }: ChatRoomProps) {
 
   return (
     <div className="flex h-screen flex-col">
+      {notification && (
+        <div className={`fixed top-4 right-4 p-4 rounded-lg ${
+          notification.type === 'success' ? 'bg-green-500' : 'bg-red-500'
+        } text-white`}>
+          {notification.message}
+        </div>
+      )}
       <header className="border-b bg-white p-4 dark:bg-gray-900">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">

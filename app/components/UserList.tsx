@@ -42,15 +42,15 @@ export default function UserList({ session, onUserSelect }: UserListProps) {
         )
       
         // Debug logs
-        console.log('Found DM Channel:', dmChannel)
-        console.log('User ID', user.user_id);
-        console.log('Last message from:', dmChannel?.last_message_from);
+      //  console.log('Found DM Channel:', dmChannel)
+      //  console.log('User ID', user.user_id);
+      //  console.log('Last message from:', dmChannel?.last_message_from);
 
         // Only count as unread if the last message was from the other user
         const unreadCount = dmChannel?.last_message_from === user.user_id ? 
           dmChannel.unread_count : 0
       
-        console.log('Unread count:', unreadCount)
+      //  console.log('Unread count:', unreadCount)
       
         return {
           id: user.user_id,
@@ -82,7 +82,7 @@ export default function UserList({ session, onUserSelect }: UserListProps) {
   }
 
   useEffect(() => {
-    // Set up 1-second refresh interval
+    // Set up 1-second refresh interval.
     const refreshInterval = setInterval(fetchUsers, 1000)
     
     // Initial fetch

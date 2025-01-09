@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react'
 import { useSupabaseClient } from '@supabase/auth-helpers-react'
 import type { Session } from '@supabase/auth-helpers-react'
-
+import { useCallback } from 'react'
 import { UserPresence } from './types'
 
 interface UserListProps {
@@ -19,7 +19,7 @@ export default function UserList({ session, onUserSelect }: UserListProps) {
   const supabase = useSupabaseClient()
   const [users, setUsers] = useState<UserPresence[]>([])
 
-  const fetchUsers = async () => {
+  const fetchUsers = useCallback(async () => {
     // First get user statuses
     const { data: statusData, error: statusError } = await supabase
       .from('user_status')
@@ -79,7 +79,7 @@ export default function UserList({ session, onUserSelect }: UserListProps) {
     })
 
     setUsers(sortedUsers)
-  }
+  }, [supabase, session])
 
   useEffect(() => {
     // Set up 1-second refresh interval.
@@ -105,7 +105,7 @@ export default function UserList({ session, onUserSelect }: UserListProps) {
       clearInterval(refreshInterval)
       channel.unsubscribe()
     }
-  }, [session, supabase])
+  }, [session, supabase, fetchUsers])
 
   const getStatusColor = (status: string) => {
     switch (status) {

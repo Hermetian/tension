@@ -16,6 +16,19 @@ export default function ChannelList({ currentChannel, onChannelSelect, session }
   const [newChannelName, setNewChannelName] = useState('')
   const [isCreating, setIsCreating] = useState(false)
 
+  const fetchChannels = async () => {
+    const { data, error } = await supabase
+      .from('channels')
+      .select('*')
+      .order('name')
+    
+    if (error) {
+      console.error('Error fetching channels:', error)
+      return
+    }
+    setChannels(data || [])
+  }
+
   useEffect(() => {
     fetchChannels()
     
@@ -34,20 +47,7 @@ export default function ChannelList({ currentChannel, onChannelSelect, session }
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [])
-
-  const fetchChannels = async () => {
-    const { data, error } = await supabase
-      .from('channels')
-      .select('*')
-      .order('name')
-    
-    if (error) {
-      console.error('Error fetching channels:', error)
-      return
-    }
-    setChannels(data || [])
-  }
+  }, [fetchChannels, supabase])
 
   const createChannel = async (e: React.FormEvent) => {
     e.preventDefault()

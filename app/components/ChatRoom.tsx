@@ -13,7 +13,7 @@ import EmojiPicker from 'emoji-picker-react'
 import { EmojiClickData } from 'emoji-picker-react'
 import ChannelList from './ChannelList'
 import UserList from './UserList'
-
+import { useCallback } from 'react'
 import { 
   UserPresence, 
   Message, 
@@ -35,7 +35,7 @@ export default function ChatRoom({ session }: ChatRoomProps) {
   const [newMessage, setNewMessage] = useState('')
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
   const [chatContext, setChatContext] = useState<ChatContext>({ type: 'channel' })
-  const [userStatus, setUserStatus] = useState<'active' | 'idle' | 'offline'>('idle')
+  //const [userStatus, setUserStatus] = useState<'active' | 'idle' | 'offline'>('idle')
   const [notification, setNotification] = useState<{
     message: string;
     type: 'success' | 'error' | 'info';
@@ -46,9 +46,33 @@ export default function ChatRoom({ session }: ChatRoomProps) {
     setTimeout(() => setNotification(null), 3000);
   };
 
-  useEffect(() => {
-    fetchDefaultChannel()
-  }, [])
+  const fetchMessages = useCallback(async (channelId: number) => {
+    const { data, error } = await supabase
+      .from('messages')
+      .select('*, file') // Add file field explicitly
+      .eq('channel_id', channelId)
+      .order('created_at', { ascending: true })
+    
+    if (error) {
+      console.error('Error fetching messages:', error)
+      return
+    }
+    setMessages(data || [])
+  }, [supabase])
+
+  const fetchDMMessages = useCallback(async (channelId: number) => {
+    const { data, error } = await supabase
+      .from('dm_messages')
+      .select('*, file') // Add file field explicitly
+      .eq('dm_channel_id', channelId)
+      .order('created_at', { ascending: true })
+    
+    if (error) {
+      console.error('Error fetching DM messages:', error)
+      return
+    }
+    setDMMessages(data || [])
+  }, [supabase])
 
   // Message subscription effect
   useEffect(() => {
@@ -91,7 +115,7 @@ export default function ChatRoom({ session }: ChatRoomProps) {
         supabase.removeChannel(channel)
       }
     }
-  }, [chatContext])
+  }, [chatContext, fetchMessages, fetchDMMessages, supabase])
 
   useEffect(() => {
     let lastActive = new Date()
@@ -143,7 +167,7 @@ export default function ChatRoom({ session }: ChatRoomProps) {
     }
   }, [session, supabase])
 
-  const fetchDefaultChannel = async () => {
+  const fetchDefaultChannel = useCallback(async () => {
     try {
       const { data, error } = await supabase
         .from('channels')
@@ -202,35 +226,11 @@ export default function ChatRoom({ session }: ChatRoomProps) {
       catch (error) {
         console.error('Error in fetchDefaultChannel:', error);
       }
-    }
+    }, [supabase, session])
 
-  const fetchMessages = async (channelId: number) => {
-    const { data, error } = await supabase
-      .from('messages')
-      .select('*, file') // Add file field explicitly
-      .eq('channel_id', channelId)
-      .order('created_at', { ascending: true })
-    
-    if (error) {
-      console.error('Error fetching messages:', error)
-      return
-    }
-    setMessages(data || [])
-  }
-
-  const fetchDMMessages = async (channelId: number) => {
-    const { data, error } = await supabase
-      .from('dm_messages')
-      .select('*, file') // Add file field explicitly
-      .eq('dm_channel_id', channelId)
-      .order('created_at', { ascending: true })
-    
-    if (error) {
-      console.error('Error fetching DM messages:', error)
-      return
-    }
-    setDMMessages(data || [])
-  }
+  useEffect(() => {
+    fetchDefaultChannel()
+  }, [fetchDefaultChannel])
 
   const clearUnreadCount = async (dmChannel: DMChannel) => {
     if (dmChannel.last_message_from !== session.user.id) {
@@ -571,9 +571,11 @@ export default function ChatRoom({ session }: ChatRoomProps) {
     if (file.type.startsWith('image/')) {
       return (
         <a href={file.url} target="_blank" rel="noopener noreferrer">
-          <img 
+          <Image 
             src={file.url} 
-            alt={file.name} 
+            alt={file.name}
+            width={320}
+            height={240}
             className="max-w-xs max-h-48 rounded-lg object-contain"
           />
         </a>

@@ -7,12 +7,13 @@ export interface UserPresence {
   }
   
   export interface Message {
-    id: number
-    content: string
-    user_id: string
-    username: string
-    channel_id: number
-    created_at: string
+    id: number;
+    content: string;
+    user_id: string;
+    username: string;
+    channel_id: number;
+    created_at: string;
+    file?: FileAttachment;  // Add this field
   }
   
   export interface Channel {
@@ -33,16 +34,24 @@ export interface UserPresence {
   }
   
   export interface DMMessage {
-    id: number
-    content: string
-    sender_id: string
-    dm_channel_id: number
-    created_at: string
+    id: number;
+    content: string;
+    sender_id: string;
+    dm_channel_id: number;
+    created_at: string;
+    file?: FileAttachment;  // Add this field
   }
-  
+
   export type ChatContext = {
     type: 'channel' | 'dm'
     channel?: Channel
     dmChannel?: DMChannel
     otherUser?: UserPresence
+  }
+
+  export interface FileAttachment {
+    url: string;
+    name: string;
+    type: string;
+    size: number;
   }

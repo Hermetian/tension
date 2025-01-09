@@ -20,7 +20,8 @@ import {
   Channel, 
   DMChannel, 
   DMMessage,
-  ChatContext 
+  ChatContext,
+  FileAttachment
 } from './types'
 
 interface ChatRoomProps {
@@ -37,10 +38,10 @@ export default function ChatRoom({ session }: ChatRoomProps) {
   const [userStatus, setUserStatus] = useState<'active' | 'idle' | 'offline'>('idle')
   const [notification, setNotification] = useState<{
     message: string;
-    type: 'success' | 'error';
+    type: 'success' | 'error' | 'info';
   } | null>(null);
 
-  const showNotification = (message: string, type: 'success' | 'error') => {
+  const showNotification = (message: string, type: 'success' | 'error' | 'info') => {
     setNotification({ message, type });
     setTimeout(() => setNotification(null), 3000);
   };
@@ -142,70 +143,71 @@ export default function ChatRoom({ session }: ChatRoomProps) {
     }
   }, [session, supabase])
 
-const fetchDefaultChannel = async () => {
-  try {
-    const { data, error } = await supabase
-      .from('channels')
-      .select()
-      .eq('name', 'general')
-      .single();
-    
-    if (error) {
-      console.log('Error fetching general channel:', error);
-      // If we can't find general channel, try to get any channel
-      const { data: anyChannel, error: anyError } = await supabase
+  const fetchDefaultChannel = async () => {
+    try {
+      const { data, error } = await supabase
         .from('channels')
         .select()
-        .limit(1)
+        .eq('name', 'general')
         .single();
-
-      if (anyError) {
-        console.log('Error fetching any channel:', anyError);
-        // If no channels exist, create general channel
-        const { data: newChannel, error: createError } = await supabase
+      
+      if (error) {
+        console.log('Error fetching general channel:', error);
+        // If we can't find general channel, try to get any channel
+        const { data: anyChannel, error: anyError } = await supabase
           .from('channels')
-          .insert([
-            {
-              name: 'general',
-              description: 'General discussion',
-              created_by: session.user.id
-            }
-          ])
           .select()
+          .limit(1)
           .single();
 
-        if (createError) {
-          console.error('Error creating general channel:', createError);
+        if (anyError) {
+          console.log('Error fetching any channel:', anyError);
+          // If no channels exist, create general channel
+          const { data: newChannel, error: createError } = await supabase
+            .from('channels')
+            .insert([
+              {
+                name: 'general',
+                description: 'General discussion',
+                created_by: session.user.id
+              }
+            ])
+            .select()
+            .single();
+
+          if (createError) {
+            console.error('Error creating general channel:', createError);
+            return;
+          }
+
+          setChatContext({
+            type: 'channel',
+            channel: newChannel
+          });
           return;
         }
 
         setChatContext({
           type: 'channel',
-          channel: newChannel
+          channel: anyChannel
         });
         return;
       }
 
       setChatContext({
         type: 'channel',
-        channel: anyChannel
+        channel: data
       });
-      return;
+    } 
+      catch (error) {
+        console.error('Error in fetchDefaultChannel:', error);
+      }
     }
-
-    setChatContext({
-      type: 'channel',
-      channel: data
-    });
-  } catch (error) {
-    console.error('Error in fetchDefaultChannel:', error);
-  }
-}
 
   const fetchMessages = async (channelId: number) => {
     const { data, error } = await supabase
       .from('messages')
-      .select('*')
+      .select('*, file') // Add file field explicitly
       .eq('channel_id', channelId)
       .order('created_at', { ascending: true })
     
@@ -219,7 +221,7 @@ const fetchDefaultChannel = async () => {
   const fetchDMMessages = async (channelId: number) => {
     const { data, error } = await supabase
       .from('dm_messages')
-      .select('*')
+      .select('*, file') // Add file field explicitly
       .eq('dm_channel_id', channelId)
       .order('created_at', { ascending: true })
     
@@ -492,12 +494,116 @@ const fetchDefaultChannel = async () => {
     setNewMessage((prevMsg) => prevMsg + emojiObject.emoji)
     setShowEmojiPicker(false)
   }
+  
+  const MAX_FILE_SIZE = 25 * 1024 * 1024; // 25MB in bytes
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > MAX_FILE_SIZE) {
+      showNotification('File size exceeds 50MB limit', 'error');
+      e.target.value = '';
+      return;
+    }
+  
+    showNotification('Uploading file...', 'info');
+  
+    try {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${Math.random()}.${fileExt}`;
+      const filePath = `${session.user.id}/${fileName}`;
+  
+      const { error: uploadError, data } = await supabase.storage
+        .from('chat-files')
+        .upload(filePath, file, {
+          cacheControl: '3600',
+          upsert: false
+        });
+  
+      if (uploadError) throw uploadError;
+  
+      // Get the public URL using the correct method
+      const { data: { publicUrl } } = supabase.storage
+        .from('chat-files')
+        .getPublicUrl(filePath, {
+          download: true
+        });
+  
+      const fileAttachment: FileAttachment = {
+        url: publicUrl,
+        name: file.name,
+        type: file.type,
+        size: file.size
+      };
+
+      // Send message with file attachment
+      if (chatContext.type === 'channel' && chatContext.channel) {
+        await supabase
+          .from('messages')
+          .insert([{
+            content: `Shared file: ${file.name}`,
+            user_id: session.user.id,
+            username: session.user.email,
+            channel_id: chatContext.channel.id,
+            file: fileAttachment
+          }]);
+      } else if (chatContext.type === 'dm' && chatContext.dmChannel) {
+        await supabase
+          .from('dm_messages')
+          .insert([{
+            content: `Shared file: ${file.name}`,
+            sender_id: session.user.id,
+            dm_channel_id: chatContext.dmChannel.id,
+            file: fileAttachment
+          }]);
+      }
+
+      showNotification('File uploaded successfully', 'success');
+    } catch (error) {
+      console.error('Error uploading file:', error);
+      showNotification('Error uploading file', 'error');
+    }
+
+    // Clear the input
+    e.target.value = '';
+  };
+  const renderFileAttachment = (file: FileAttachment) => {
+    if (file.type.startsWith('image/')) {
+      return (
+        <a href={file.url} target="_blank" rel="noopener noreferrer">
+          <img 
+            src={file.url} 
+            alt={file.name} 
+            className="max-w-xs max-h-48 rounded-lg object-contain"
+          />
+        </a>
+      );
+    }
+  
+    // For non-image files, show a download link
+    return (
+      <a 
+        href={file.url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="flex items-center space-x-2 text-blue-500 hover:text-blue-600"
+      >
+        <span>📎</span>
+        <span>{file.name}</span>
+        <span className="text-xs text-gray-500">
+          ({(file.size / 1024 / 1024).toFixed(2)} MB)
+        </span>
+      </a>
+    );
+  };
 
   return (
     <div className="flex h-screen flex-col">
       {notification && (
         <div className={`fixed top-4 right-4 p-4 rounded-lg ${
-          notification.type === 'success' ? 'bg-green-500' : 'bg-red-500'
+          notification.type === 'success' ? 'bg-green-500' :
+          notification.type === 'info' ? 'bg-blue-500' :
+          'bg-red-500'
         } text-white`}>
           {notification.message}
         </div>
@@ -573,6 +679,7 @@ const fetchDefaultChannel = async () => {
                     }`}>
                       <p className="text-sm font-medium">{message.username}</p>
                       <p>{message.content}</p>
+                      {message.file && renderFileAttachment(message.file)}
                     </div>
                   </div>
                 ))
@@ -593,6 +700,7 @@ const fetchDefaultChannel = async () => {
                         {message.sender_id === session.user.id ? 'You' : chatContext.otherUser?.email}
                       </p>
                       <p>{message.content}</p>
+                      {message.file && renderFileAttachment(message.file)}
                     </div>
                   </div>
                 ))
@@ -640,6 +748,13 @@ const fetchDefaultChannel = async () => {
                 >
                   😊
                 </button>
+                <button
+                type="button"
+                onClick={() => document.getElementById('file-input')?.click()}
+                className="absolute right-12 top-1/2 -translate-y-1/2 p-2 text-gray-500 hover:text-gray-700"
+              >
+                <span className="text-xl">+</span>
+              </button>
                 {showEmojiPicker && (
                   <div className="absolute bottom-full right-0 mb-2">
                     <EmojiPicker
@@ -649,6 +764,15 @@ const fetchDefaultChannel = async () => {
                   </div>
                 )}
               </div>
+
+              <input
+                id="file-input"
+                type="file"
+                className="hidden"
+                onChange={handleFileUpload}
+                accept="image/*,video/*,application/pdf"  // Adjust accepted file types as needed
+                data-max-size={MAX_FILE_SIZE}  // This is for documentation purposes
+              />
               <button
                 type="submit"
                 className="rounded-lg bg-blue-500 px-4 py-2 text-white hover:bg-blue-600"

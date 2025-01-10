@@ -5,7 +5,7 @@ declare global {
   }
 }
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useSupabaseClient } from '@supabase/auth-helpers-react'
 import type { Session } from '@supabase/auth-helpers-react'
 import Image from "next/image"
@@ -24,6 +24,7 @@ import {
   FileAttachment
 } from './types'
 import SearchBar from './SearchBar';
+import { MessageThread } from './MessageThread';
 
 interface ChatRoomProps {
   session: Session
@@ -38,7 +39,9 @@ export default function ChatRoom({ session }: ChatRoomProps) {
   const [chatContext, setChatContext] = useState<ChatContext>({ type: 'channel' })
   const [searchResults, setSearchResults] = useState<(Message | DMMessage)[]>([])
   const [isShowingSearchResults, setIsShowingSearchResults] = useState(false)
+  const [replyingTo, setReplyingTo] = useState<number | null>(null);
   //const [userStatus, setUserStatus] = useState<'active' | 'idle' | 'offline'>('idle')
+  const inputRef = useRef<HTMLInputElement>(null)
   const [notification, setNotification] = useState<{
     message: string;
     type: 'success' | 'error' | 'info';
@@ -77,9 +80,49 @@ export default function ChatRoom({ session }: ChatRoomProps) {
     setDMMessages(data || [])
   }, [supabase])
 
+  const organizeMessagesIntoThreads = (messages: Message[]) => {
+    const threads: { [key: number]: Message[] } = {};
+    // Only messages without a parent_message_id should be considered top-level
+    const topLevelMessages = messages.filter(message => {
+      if (message.parent_message_id) {
+        // If this is a reply, add it to the appropriate thread
+        if (!threads[message.parent_message_id]) {
+          threads[message.parent_message_id] = [];
+        }
+        threads[message.parent_message_id].push(message);
+        return false; // Don't include it in topLevelMessages
+      }
+      return true; // Include only non-reply messages in topLevelMessages
+    });
+  
+    // Sort both top-level messages and replies by creation time
+    topLevelMessages.sort((a, b) => 
+      new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+    );
+  
+    // Sort replies within each thread
+    Object.keys(threads).forEach(threadId => {
+      threads[Number(threadId)].sort((a, b) => 
+        new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+      );
+    });
+  
+    return { threads, topLevelMessages };
+  };
+
+  const handleReplyClick = (messageId: number) => {
+    setReplyingTo(messageId);
+    // Use setTimeout to ensure the focus happens after the state update
+    setTimeout(() => {
+      if (inputRef.current) {
+        inputRef.current.focus();
+      }
+    }, 0);
+  }
   // Message subscription effect
   useEffect(() => {
     if (chatContext.type === 'channel' && chatContext.channel) {
+      const channelId = chatContext.channel.id; 
       // Subscribe to channel messages
       const channel = supabase
         .channel('messages')
@@ -89,11 +132,11 @@ export default function ChatRoom({ session }: ChatRoomProps) {
           table: 'messages',
           filter: `channel_id=eq.${chatContext.channel.id}`
         }, payload => {
-          setMessages(messages => [...messages, payload.new as Message])
+          fetchMessages(channelId)
         })
         .subscribe()
 
-      fetchMessages(chatContext.channel.id)
+      fetchMessages(channelId)
 
       return () => {
         supabase.removeChannel(channel)
@@ -303,11 +346,9 @@ export default function ChatRoom({ session }: ChatRoomProps) {
   }
 
   const sendMessage = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!newMessage.trim()) return
-  
-    console.log('Message received:', newMessage.trim()); // Debug log
-  
+    e.preventDefault();
+    if (!newMessage.trim()) return;
+
     // Handle clear command
     if (newMessage.trim() === '/clear') {
       console.log('Clear command detected'); // Debug log
@@ -388,7 +429,7 @@ export default function ChatRoom({ session }: ChatRoomProps) {
         return;
       }
     }
-
+  
     if (chatContext.type === 'channel' && chatContext.channel) {
       const { error } = await supabase
         .from('messages')
@@ -397,16 +438,19 @@ export default function ChatRoom({ session }: ChatRoomProps) {
             content: newMessage,
             user_id: session.user.id,
             username: session.user.email,
-            channel_id: chatContext.channel.id
+            channel_id: chatContext.channel.id,
+            parent_message_id: replyingTo  // Add this line
           }
         ])
-
+  
       if (error) {
-        console.error('Error sending message:', error)
-        return
+        console.error('Error sending message:', error);
+        return;
       }
-    } 
-
+      setNewMessage('');
+      setReplyingTo(null);  // Clear reply state after sending
+    }
+  
     else if (chatContext.type === 'dm' && chatContext.dmChannel) {
       console.log('Sending DM, current user:', session.user.id);
       console.log('DM Channel before update:', chatContext.dmChannel);
@@ -462,8 +506,10 @@ export default function ChatRoom({ session }: ChatRoomProps) {
         console.error('Error in DM handling:', error);
       }
     }
+    console.log('Message received:', newMessage.trim()); // Debug log
 
-    setNewMessage('')
+    setNewMessage('');
+    setReplyingTo(null);
   }
 
   const handleLogout = async () => {
@@ -716,28 +762,26 @@ export default function ChatRoom({ session }: ChatRoomProps) {
                   })}
                 </div>
               </div>
-            ) : (
-            <div className="space-y-4">
-              {chatContext.type === 'channel' ? (
-                messages.map((message) => (
-                  <div
-                    key={message.id}
-                    className={`flex ${
-                      message.user_id === session.user.id ? 'justify-end' : 'justify-start'
-                    }`}
-                  >
-                    <div className={`rounded-lg px-4 py-2 ${
-                      message.user_id === session.user.id 
-                      ? 'bg-blue-500 text-white' 
-                      : 'bg-gray-100 dark:bg-gray-800'
-                    }`}>
-                      <p className="text-sm font-medium">{message.username}</p>
-                      <p>{message.content}</p>
-                      {message.file && renderFileAttachment(message.file)}
-                    </div>
-                  </div>
-                ))
               ) : (
+                <div className="space-y-4">
+                  {chatContext.type === 'channel' ? (
+                    (() => {
+                      // First, organize messages into threads and top-level messages
+                      const { threads, topLevelMessages } = organizeMessagesIntoThreads(messages);
+                      
+                      // Then render each top-level message with its replies
+                      return topLevelMessages.map(message => (
+                        <MessageThread
+                          key={message.id}
+                          message={message}
+                          replies={threads[message.id] || []}
+                          currentUserId={session.user.id}
+                          onReply={handleReplyClick}
+                          renderFileAttachment={renderFileAttachment}
+                        />
+                      ));
+                    })()
+                  ) : (
                 dmMessages.map((message) => (
                   <div
                     key={message.id}
@@ -764,9 +808,25 @@ export default function ChatRoom({ session }: ChatRoomProps) {
           </main>
 
           <form onSubmit={sendMessage} className="border-t p-4">
+            {replyingTo && (
+              <div className="mb-2 rounded bg-gray-100 p-2 text-sm dark:bg-gray-800">
+                Replying to a message •
+                <button
+                type="button"
+                  onClick={(e) => {
+                    e.preventDefault()
+                    setReplyingTo(null)
+                  }}
+                  className="ml-2 text-blue-500 hover:text-blue-600"
+                >
+                  Cancel
+                </button>
+              </div>
+            )}
             <div className="flex space-x-4">
               <div className="relative flex-1">
                 <input
+                  ref={inputRef}
                   type="text"
                   value={newMessage}
                   onChange={async (e) => {
@@ -790,12 +850,15 @@ export default function ChatRoom({ session }: ChatRoomProps) {
 
                   }}
                   placeholder={
-                    chatContext.type === 'channel'
+                    replyingTo
+                    ? "Reply to message"
+                    : chatContext.type === 'channel'
                       ? `Message #${chatContext.channel?.name}`
                       : `Message ${chatContext.otherUser?.email}`
                   }
                   className="w-full rounded-lg border bg-transparent px-4 py-2 focus:border-blue-500 focus:outline-none dark:border-gray-700"
                 />
+                
                 <button
                   type="button"
                   onClick={() => setShowEmojiPicker(!showEmojiPicker)}

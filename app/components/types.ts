@@ -13,7 +13,8 @@ export interface UserPresence {
     username: string;
     channel_id: number;
     created_at: string;
-    file?: FileAttachment;  // Add this field
+    file?: FileAttachment;
+    parent_message_id?: number;  // Add this for threading support
   }
   
   export interface Channel {

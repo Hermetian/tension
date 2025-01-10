@@ -2,7 +2,6 @@
 import { useState } from 'react';
 import { useSupabaseClient } from '@supabase/auth-helpers-react';
 import type { Message, DMMessage } from './types';
-import type { Session } from '@supabase/auth-helpers-react';
 
 interface SearchBarProps {
   chatContext: {
@@ -10,11 +9,10 @@ interface SearchBarProps {
     channel?: { id: number };
     dmChannel?: { id: number };
   };
-  session: Session;
   onResultsFound: (results: (Message | DMMessage)[]) => void;
 }
 
-export default function SearchBar({ chatContext, session, onResultsFound }: SearchBarProps) {
+export default function SearchBar({ chatContext, onResultsFound }: SearchBarProps) {
   const supabase = useSupabaseClient();
   const [searchTerm, setSearchTerm] = useState('');
   const [isSearching, setIsSearching] = useState(false);

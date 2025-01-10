@@ -627,7 +627,6 @@ export default function ChatRoom({ session }: ChatRoomProps) {
 
       <SearchBar 
       chatContext={chatContext}
-      session={session}
       onResultsFound={(results) => {
         setSearchResults(results);
         setIsShowingSearchResults(true);

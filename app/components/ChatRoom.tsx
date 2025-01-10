@@ -455,16 +455,6 @@ export default function ChatRoom({ session }: ChatRoomProps) {
           console.error('Error sending DM:', messageResult.error);
           return;
         }
-    
-        // Fetch the updated channel to verify changes
-        const { data: updatedChannel } = await supabase
-          .from('dm_channels')
-          .select('*')
-          .eq('id', channelCheck.id)
-          .single();
-    
-      //  console.log('Channel after update:', updatedChannel);
-    
       } catch (error) {
         console.error('Error in DM handling:', error);
       }

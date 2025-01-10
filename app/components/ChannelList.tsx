@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useSupabaseClient } from '@supabase/auth-helpers-react'
 import type { Session } from '@supabase/auth-helpers-react'
 import { Channel } from './types'
@@ -16,7 +16,7 @@ export default function ChannelList({ currentChannel, onChannelSelect, session }
   const [newChannelName, setNewChannelName] = useState('')
   const [isCreating, setIsCreating] = useState(false)
 
-  const fetchChannels = async () => {
+  const fetchChannels = useCallback(async () => {
     const { data, error } = await supabase
       .from('channels')
       .select('*')
@@ -27,7 +27,7 @@ export default function ChannelList({ currentChannel, onChannelSelect, session }
       return
     }
     setChannels(data || [])
-  }
+  }, [supabase]);
 
   useEffect(() => {
     fetchChannels()

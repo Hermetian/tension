@@ -131,7 +131,7 @@ export default function ChatRoom({ session }: ChatRoomProps) {
           schema: 'public',
           table: 'messages',
           filter: `channel_id=eq.${chatContext.channel.id}`
-        }, payload => {
+        }, () => {
           fetchMessages(channelId)
         })
         .subscribe()

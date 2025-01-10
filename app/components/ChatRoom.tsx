@@ -23,6 +23,7 @@ import {
   ChatContext,
   FileAttachment
 } from './types'
+import SearchBar from './SearchBar';
 
 interface ChatRoomProps {
   session: Session
@@ -35,6 +36,8 @@ export default function ChatRoom({ session }: ChatRoomProps) {
   const [newMessage, setNewMessage] = useState('')
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
   const [chatContext, setChatContext] = useState<ChatContext>({ type: 'channel' })
+  const [searchResults, setSearchResults] = useState<(Message | DMMessage)[]>([])
+  const [isShowingSearchResults, setIsShowingSearchResults] = useState(false)
   //const [userStatus, setUserStatus] = useState<'active' | 'idle' | 'offline'>('idle')
   const [notification, setNotification] = useState<{
     message: string;
@@ -622,6 +625,15 @@ export default function ChatRoom({ session }: ChatRoomProps) {
         </div>
       </header>
 
+      <SearchBar 
+      chatContext={chatContext}
+      session={session}
+      onResultsFound={(results) => {
+        setSearchResults(results);
+        setIsShowingSearchResults(true);
+      }}
+      />
+
       <div className="flex flex-1 overflow-hidden">
         <div className="flex w-64 flex-col border-r">
           <div className="flex-shrink-0">
@@ -655,6 +667,57 @@ export default function ChatRoom({ session }: ChatRoomProps) {
           </div>
 
           <main className="flex-1 overflow-y-auto p-4">
+            {isShowingSearchResults ? (
+              <div>
+                <div className="mb-4 flex justify-between">
+                  <h3 className="text-lg font-semibold">
+                    Search Results ({searchResults.length})
+                  </h3>
+                  <button
+                    onClick={() => setIsShowingSearchResults(false)}
+                    className="text-blue-500 hover:text-blue-600"
+                  >
+                    Back to Messages
+                  </button>
+                </div>
+                <div className="space-y-4">
+                  {searchResults.map((result) => {
+                    const isCurrentUser = 
+                      (chatContext.type === 'channel' && 'user_id' in result && result.user_id === session.user.id) ||
+                      (chatContext.type === 'dm' && 'sender_id' in result && result.sender_id === session.user.id);
+                    const username = chatContext.type === 'channel' 
+                      ? ('username' in result ? result.username : '')
+                      : (isCurrentUser ? 'You' : chatContext.otherUser?.email);
+
+                    return (
+                      <div
+                        key={result.id}
+                        className={`flex ${isCurrentUser ? 'justify-end' : 'justify-start'}`}
+                      >
+                        <div 
+                          className={`rounded-lg px-4 py-2 ${
+                            isCurrentUser 
+                              ? 'bg-blue-500 text-white' 
+                              : 'bg-gray-100 dark:bg-gray-800'
+                          }`}
+                        >
+                          <div className="flex flex-col">
+                            <div className="flex items-center justify-between gap-4">
+                              <p className="text-sm font-medium">{username}</p>
+                              <span className="text-xs opacity-75">
+                                {new Date(result.created_at).toLocaleString()}
+                              </span>
+                            </div>
+                            <p>{result.content}</p>
+                            {result.file && renderFileAttachment(result.file)}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : (
             <div className="space-y-4">
               {chatContext.type === 'channel' ? (
                 messages.map((message) => (
@@ -698,6 +761,7 @@ export default function ChatRoom({ session }: ChatRoomProps) {
                 ))
               )}
             </div>
+            )}
           </main>
 
           <form onSubmit={sendMessage} className="border-t p-4">

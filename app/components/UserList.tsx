@@ -29,7 +29,7 @@ export default function UserList({ session, onUserSelect }: UserListProps) {
     if (statusError || !statusData) return
 
     // Then get unread counts from DM channels
-    const { data: dmData, error: _dmError } = await supabase
+    const { data: dmData} = await supabase
       .from('dm_channels')
       .select('*')
       .or(`user1_id.eq.${session.user.id},user2_id.eq.${session.user.id}`)

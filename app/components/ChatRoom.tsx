@@ -503,7 +503,7 @@ export default function ChatRoom({ session }: ChatRoomProps) {
       const fileName = `${Math.random()}.${fileExt}`;
       const filePath = `${session.user.id}/${fileName}`;
   
-      const { error: uploadError, data } = await supabase.storage
+      const {error: uploadError} = await supabase.storage
         .from('chat-files')
         .upload(filePath, file, {
           cacheControl: '3600',

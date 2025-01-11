@@ -21,8 +21,7 @@ import {
   DMChannel, 
   DMMessage,
   ChatContext,
-  FileAttachment,
-  MessageReaction
+  FileAttachment
 } from './types'
 import SearchBar from './SearchBar';
 import { MessageThread } from './MessageThread';

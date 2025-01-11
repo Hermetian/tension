@@ -1,6 +1,8 @@
 'use client';
 import { useState } from 'react';
 import { FileAttachment, Message } from './types';
+import { useSupabaseClient } from '@supabase/auth-helpers-react';
+import EmojiPicker, { EmojiClickData } from 'emoji-picker-react';
 
 interface MessageThreadProps {
   message: Message;
@@ -17,8 +19,83 @@ export function MessageThread({
     onReply,
     renderFileAttachment 
   }: MessageThreadProps) {
-    // Track hover state for each message individually
+    const supabase = useSupabaseClient();
     const [hoveredMessageId, setHoveredMessageId] = useState<number | null>(null);
+    const [showEmojiPickerFor, setShowEmojiPickerFor] = useState<number | null>(null);
+  
+    // Function to handle adding a reaction
+    const addReaction = async (emoji: string, messageId: number) => {
+      // Check if the user has already reacted to this message
+      const { data: existingReaction, error: fetchError } = await supabase
+        .from('message_reactions')
+        .select('*')
+        .eq('message_id', messageId)
+        .eq('user_id', currentUserId)
+        .single();
+
+      if (fetchError && fetchError.code !== 'PGRST116') {
+        // If error is not "No rows found", log it
+        console.error('Error checking existing reaction:', fetchError);
+        return;
+      }
+
+      if (existingReaction) {
+        // Update the existing reaction with the new emoji
+        const { error: updateError } = await supabase
+          .from('message_reactions')
+          .update({ emoji })
+          .eq('id', existingReaction.id);
+
+        if (updateError) {
+          console.error('Error updating reaction:', updateError);
+        }
+      } else {
+        // Insert a new reaction
+        const { error: insertError } = await supabase
+          .from('message_reactions')
+          .insert([
+            {
+              message_id: messageId,
+              user_id: currentUserId,
+              emoji: emoji,
+            },
+          ]);
+
+        if (insertError) {
+          console.error('Error adding reaction:', insertError);
+        }
+      }
+    };
+  
+    // Helper function to render reactions
+    const renderReactions = (msg: Message) => {
+      if (!msg.reactions || msg.reactions.length === 0) return null;
+
+      // Aggregate reactions
+      const reactionCounts: { [emoji: string]: number } = {};
+      msg.reactions.forEach((reaction) => {
+        reactionCounts[reaction.emoji] = (reactionCounts[reaction.emoji] || 0) + 1;
+      });
+
+      // Get top 3 reactions
+      const topReactions = Object.entries(reactionCounts)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 3);
+
+      return (
+        <div className="mt-1 flex space-x-2">
+          {topReactions.map(([emoji, count]) => (
+            <div
+              key={emoji}
+              className="flex items-center space-x-1 rounded-full bg-blue-600 px-2 py-1 text-sm text-white"
+            >
+              <span>{emoji}</span>
+              <span>{count}</span>
+            </div>
+          ))}
+        </div>
+      );
+    };
   
     // Helper function to render a single message
     const renderMessage = (msg: Message, isReply: boolean = false) => (
@@ -29,18 +106,32 @@ export function MessageThread({
         onMouseLeave={() => setHoveredMessageId(null)}
       >
         <div className="relative">
-          {/* Reply button - show on hover for ALL messages, not just our own */}
-          {hoveredMessageId === msg.id && !isReply && (
-            <button
-              onClick={() => onReply(msg.id)}
+          {/* Hover buttons */}
+          {hoveredMessageId === msg.id && (
+            <div
               className={`absolute ${
-                // Position the reply button on the appropriate side based on message alignment
-                msg.user_id === currentUserId ? '-left-8' : '-right-8'
-              } top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600`}
-              title="Reply to this message"
+                msg.user_id === currentUserId ? '-left-20' : '-right-20'
+              } top-1/2 -translate-y-1/2 flex space-x-2`}
             >
-              ↩️
-            </button>
+              {/* Reply button */}
+              {!isReply && (
+                <button
+                  onClick={() => onReply(msg.id)}
+                  className="text-gray-400 hover:text-gray-600"
+                  title="Reply to this message"
+                >
+                  ↩️
+                </button>
+              )}
+              {/* React button */}
+              <button
+                onClick={() => setShowEmojiPickerFor(msg.id)}
+                className="text-gray-400 hover:text-gray-600"
+                title="React to this message"
+              >
+                😊
+              </button>
+            </div>
           )}
           
           {/* Message content */}
@@ -52,7 +143,20 @@ export function MessageThread({
             <p className="text-sm font-medium">{msg.username}</p>
             <p>{msg.content}</p>
             {msg.file && renderFileAttachment(msg.file)}
+            {renderReactions(msg)}
           </div>
+
+          {/* Emoji Picker */}
+          {showEmojiPickerFor === msg.id && (
+            <div className="absolute z-10">
+              <EmojiPicker
+                onEmojiClick={async (emojiObject: EmojiClickData) => {
+                  await addReaction(emojiObject.emoji, msg.id);
+                  setShowEmojiPickerFor(null);
+                }}
+              />
+            </div>
+          )}
         </div>
       </div>
     );

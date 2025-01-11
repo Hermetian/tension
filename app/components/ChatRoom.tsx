@@ -21,7 +21,8 @@ import {
   DMChannel, 
   DMMessage,
   ChatContext,
-  FileAttachment
+  FileAttachment,
+  MessageReaction
 } from './types'
 import SearchBar from './SearchBar';
 import { MessageThread } from './MessageThread';
@@ -55,7 +56,11 @@ export default function ChatRoom({ session }: ChatRoomProps) {
   const fetchMessages = useCallback(async (channelId: number) => {
     const { data, error } = await supabase
       .from('messages')
-      .select('*, file') // Add file field explicitly
+      .select(`
+        *, 
+        file,
+        reactions:message_reactions(*)
+      `)
       .eq('channel_id', channelId)
       .order('created_at', { ascending: true })
     
@@ -123,24 +128,32 @@ export default function ChatRoom({ session }: ChatRoomProps) {
   useEffect(() => {
     if (chatContext.type === 'channel' && chatContext.channel) {
       const channelId = chatContext.channel.id; 
-      // Subscribe to channel messages
-      const channel = supabase
-        .channel('messages')
+      // Subscribe to channel messages and reactions
+      const messageChannel = supabase
+        .channel(`messages-${channelId}`)
         .on('postgres_changes', {
-          event: 'INSERT',
+          event: '*',
           schema: 'public',
           table: 'messages',
-          filter: `channel_id=eq.${chatContext.channel.id}`
+          filter: `channel_id=eq.${channelId}`
         }, () => {
-          fetchMessages(channelId)
+          fetchMessages(channelId);
         })
-        .subscribe()
+        .on('postgres_changes', {
+          event: '*',
+          schema: 'public',
+          table: 'message_reactions',
+          filter: `message_id=in.(select id from messages where channel_id=eq.${channelId})`
+        }, () => {
+          fetchMessages(channelId);
+        })
+        .subscribe();
 
-      fetchMessages(channelId)
+      fetchMessages(channelId);
 
       return () => {
-        supabase.removeChannel(channel)
-      }
+        supabase.removeChannel(messageChannel);
+      };
     } else if (chatContext.type === 'dm' && chatContext.dmChannel) {
       // Subscribe to DM messages
       const channel = supabase

@@ -15,6 +15,15 @@ export interface UserPresence {
     created_at: string;
     file?: FileAttachment;
     parent_message_id?: number;  // Add this for threading support
+    reactions?: MessageReaction[];
+  }
+  
+  export interface MessageReaction {
+    id: number;
+    message_id: number;
+    user_id: string;
+    emoji: string;
+    created_at: string;
   }
   
   export interface Channel {

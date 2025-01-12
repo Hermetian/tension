@@ -25,6 +25,7 @@ import {
 } from './types'
 import SearchBar from './SearchBar';
 import { MessageThread } from './MessageThread';
+import { DMMessageThread } from './DMMessageThread';
 
 interface ChatRoomProps {
   session: Session
@@ -73,7 +74,11 @@ export default function ChatRoom({ session }: ChatRoomProps) {
   const fetchDMMessages = useCallback(async (channelId: number) => {
     const { data, error } = await supabase
       .from('dm_messages')
-      .select('*, file') // Add file field explicitly
+      .select(`
+        *, 
+        file,
+        reactions:message_reactions!dm_message_id(*)
+      `)
       .eq('dm_channel_id', channelId)
       .order('created_at', { ascending: true })
     
@@ -216,8 +221,29 @@ export default function ChatRoom({ session }: ChatRoomProps) {
           schema: 'public',
           table: 'dm_messages',
           filter: `dm_channel_id=eq.${chatContext.dmChannel.id}`
-        }, payload => {
-          setDMMessages(messages => [...messages, payload.new as DMMessage])
+        }, () => {
+          fetchDMMessages(chatContext.dmChannel!.id);
+        })
+        .on('postgres_changes', {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'message_reactions'
+        }, () => {
+          fetchDMMessages(chatContext.dmChannel!.id);
+        })
+        .on('postgres_changes', {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'message_reactions'
+        }, () => {
+          fetchDMMessages(chatContext.dmChannel!.id);
+        })
+        .on('postgres_changes', {
+          event: 'DELETE',
+          schema: 'public',
+          table: 'message_reactions'
+        }, () => {
+          fetchDMMessages(chatContext.dmChannel!.id);
         })
         .subscribe();
 
@@ -849,24 +875,13 @@ export default function ChatRoom({ session }: ChatRoomProps) {
                     })()
                   ) : (
                 dmMessages.map((message) => (
-                  <div
+                  <DMMessageThread
                     key={message.id}
-                    className={`flex ${
-                      message.sender_id === session.user.id ? 'justify-end' : 'justify-start'
-                    }`}
-                  >
-                    <div className={`rounded-lg px-4 py-2 ${
-                      message.sender_id === session.user.id 
-                      ? 'bg-blue-500 text-white' 
-                      : 'bg-gray-100 dark:bg-gray-800'
-                    }`}>
-                      <p className="text-sm font-medium">
-                        {message.sender_id === session.user.id ? 'You' : chatContext.otherUser?.email}
-                      </p>
-                      <p>{message.content}</p>
-                      {message.file && renderFileAttachment(message.file)}
-                    </div>
-                  </div>
+                    message={message}
+                    currentUserId={session.user.id}
+                    otherUserEmail={chatContext.otherUser?.email}
+                    renderFileAttachment={renderFileAttachment}
+                  />
                 ))
               )}
             </div>

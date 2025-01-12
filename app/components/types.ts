@@ -49,7 +49,8 @@ export interface UserPresence {
     sender_id: string;
     dm_channel_id: number;
     created_at: string;
-    file?: FileAttachment;  // Add this field
+    file?: FileAttachment;
+    reactions?: MessageReaction[];
   }
 
   export type ChatContext = {

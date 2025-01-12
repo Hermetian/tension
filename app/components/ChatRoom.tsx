@@ -125,35 +125,75 @@ export default function ChatRoom({ session }: ChatRoomProps) {
   }
   // Message subscription effect
   useEffect(() => {
-    if (chatContext.type === 'channel' && chatContext.channel) {
-      const channelId = chatContext.channel.id; 
-      // Subscribe to channel messages and reactions
-      const messageChannel = supabase
-        .channel(`messages-${channelId}`)
-        .on('postgres_changes', {
-          event: '*',
-          schema: 'public',
-          table: 'messages',
-          filter: `channel_id=eq.${channelId}`
-        }, () => {
-          fetchMessages(channelId);
-        })
-        .on('postgres_changes', {
-          event: '*',
-          schema: 'public',
-          table: 'message_reactions',
-          filter: `message_id=in.(select id from messages where channel_id=eq.${channelId})`
-        }, () => {
-          fetchMessages(channelId);
-        })
-        .subscribe();
+    console.log('Setting up subscription for context:', chatContext);
 
+    if (chatContext.type === 'channel' && chatContext.channel) {
+      const channelId = chatContext.channel.id;
+      console.log('Setting up channel subscription for channel:', channelId);
+
+      // Create a new realtime channel
+      const realtimeChannel = supabase.channel(`public:messages:${channelId}`, {
+        config: {
+          broadcast: { self: true },
+          presence: { key: '' },
+        },
+      });
+
+      // Subscribe to messages table changes
+      realtimeChannel
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'messages',
+            filter: `channel_id=eq.${channelId}`,
+          },
+          () => {
+            console.log('Message change detected, fetching messages...');
+            fetchMessages(channelId);
+          }
+        )
+        .subscribe(status => {
+          console.log('Messages subscription status:', status);
+        });
+
+      // Subscribe to reactions table changes
+      const reactionsChannel = supabase.channel(`public:reactions:${channelId}`, {
+        config: {
+          broadcast: { self: true },
+          presence: { key: '' },
+        },
+      });
+
+      reactionsChannel
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'message_reactions',
+          },
+          () => {
+            console.log('Reaction change detected, fetching messages...');
+            fetchMessages(channelId);
+          }
+        )
+        .subscribe(status => {
+          console.log('Reactions subscription status:', status);
+        });
+
+      // Initial fetch
       fetchMessages(channelId);
 
+      // Cleanup
       return () => {
-        supabase.removeChannel(messageChannel);
+        console.log('Cleaning up subscriptions...');
+        supabase.removeChannel(realtimeChannel);
+        supabase.removeChannel(reactionsChannel);
       };
     } else if (chatContext.type === 'dm' && chatContext.dmChannel) {
+      console.log('Setting up DM subscription for channel:', chatContext.dmChannel.id);
       // Subscribe to DM messages
       const channel = supabase
         .channel(`dm-${chatContext.dmChannel.id}`)
@@ -165,13 +205,13 @@ export default function ChatRoom({ session }: ChatRoomProps) {
         }, payload => {
           setDMMessages(messages => [...messages, payload.new as DMMessage])
         })
-        .subscribe()
+        .subscribe();
 
-      fetchDMMessages(chatContext.dmChannel.id)
+      fetchDMMessages(chatContext.dmChannel.id);
 
       return () => {
-        supabase.removeChannel(channel)
-      }
+        supabase.removeChannel(channel);
+      };
     }
   }, [chatContext, fetchMessages, fetchDMMessages, supabase])
 

@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { FileAttachment, Message } from './types';
 import { useSupabaseClient } from '@supabase/auth-helpers-react';
 import EmojiPicker, { EmojiClickData } from 'emoji-picker-react';
@@ -22,6 +22,7 @@ export function MessageThread({
     const supabase = useSupabaseClient();
     const [hoveredMessageId, setHoveredMessageId] = useState<number | null>(null);
     const [showEmojiPickerFor, setShowEmojiPickerFor] = useState<number | null>(null);
+    const [messages, setMessages] = useState<Message[]>([]);
   
     // Function to handle adding a reaction
     const addReaction = async (emoji: string, messageId: number) => {
@@ -159,6 +160,26 @@ export function MessageThread({
           )}
         </div>
       </div>
+    );
+  
+    const fetchMessages = useCallback(
+      async (channelId: number) => {
+        const { data, error } = await supabase
+          .from('messages')
+          .select(`
+            *,
+            reactions:message_reactions(*)
+          `)
+          .eq('channel_id', channelId)
+          .order('created_at', { ascending: true });
+
+        if (error) {
+          console.error('Error fetching messages:', error);
+          return;
+        }
+        setMessages(data || []);
+      },
+      [supabase]
     );
   
     return (

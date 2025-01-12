@@ -131,66 +131,80 @@ export default function ChatRoom({ session }: ChatRoomProps) {
       const channelId = chatContext.channel.id;
       console.log('Setting up channel subscription for channel:', channelId);
 
-      // Create a new realtime channel
-      const realtimeChannel = supabase.channel(`public:messages:${channelId}`, {
-        config: {
-          broadcast: { self: true },
-          presence: { key: '' },
-        },
-      });
-
-      // Subscribe to messages table changes
-      realtimeChannel
+      const channel = supabase
+        .channel(`messages-${channelId}`)
         .on(
           'postgres_changes',
           {
-            event: '*',
+            event: 'INSERT',
             schema: 'public',
             table: 'messages',
             filter: `channel_id=eq.${channelId}`,
           },
-          () => {
-            console.log('Message change detected, fetching messages...');
+          (payload) => {
+            console.log('New message inserted:', payload);
             fetchMessages(channelId);
           }
         )
-        .subscribe(status => {
-          console.log('Messages subscription status:', status);
-        });
-
-      // Subscribe to reactions table changes
-      const reactionsChannel = supabase.channel(`public:reactions:${channelId}`, {
-        config: {
-          broadcast: { self: true },
-          presence: { key: '' },
-        },
-      });
-
-      reactionsChannel
         .on(
           'postgres_changes',
           {
-            event: '*',
+            event: 'UPDATE',
             schema: 'public',
-            table: 'message_reactions',
+            table: 'messages',
+            filter: `channel_id=eq.${channelId}`,
           },
-          () => {
-            console.log('Reaction change detected, fetching messages...');
+          (payload) => {
+            console.log('Message updated:', payload);
             fetchMessages(channelId);
           }
         )
-        .subscribe(status => {
-          console.log('Reactions subscription status:', status);
+        .on(
+          'postgres_changes',
+          {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'message_reactions'
+          },
+          (payload) => {
+            console.log('New reaction inserted:', payload);
+            fetchMessages(channelId);
+          }
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'message_reactions'
+          },
+          (payload) => {
+            console.log('Reaction updated:', payload);
+            fetchMessages(channelId);
+          }
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: 'DELETE',
+            schema: 'public',
+            table: 'message_reactions'
+          },
+          (payload) => {
+            console.log('Reaction deleted:', payload);
+            fetchMessages(channelId);
+          }
+        )
+        .subscribe((status) => {
+          console.log(`Subscription status for channel ${channelId}:`, status);
         });
 
-      // Initial fetch
+      console.log('Initial message fetch for channel:', channelId);
       fetchMessages(channelId);
 
-      // Cleanup
       return () => {
-        console.log('Cleaning up subscriptions...');
-        supabase.removeChannel(realtimeChannel);
-        supabase.removeChannel(reactionsChannel);
+        console.log('Cleaning up subscription for channel:', channelId);
+        supabase.removeChannel(channel);
       };
     } else if (chatContext.type === 'dm' && chatContext.dmChannel) {
       console.log('Setting up DM subscription for channel:', chatContext.dmChannel.id);

@@ -1,10 +1,9 @@
-// app/utils/ragUtils.ts
 import { OpenAIEmbeddings, ChatOpenAI } from '@langchain/openai';
 import { PineconeStore } from '@langchain/pinecone';
 import { Pinecone } from '@pinecone-database/pinecone';
 import { Document } from '@langchain/core/documents';
 import { HumanMessage, SystemMessage } from '@langchain/core/messages';
-import { Message } from '../components/types';
+import { Message } from '../../components/types';
 
 interface MessageMetadata {
   messageId: number;
@@ -16,17 +15,17 @@ interface MessageMetadata {
 
 const initPinecone = async () => {
   const pinecone = new Pinecone({
-    apiKey: process.env.NEXT_PUBLIC_PINECONE_API_KEY!
+    apiKey: process.env.PINECONE_API_KEY!
   });
   return pinecone;
 };
 
 export const indexMessages = async (messages: Message[]) => {
   const pinecone = await initPinecone();
-  const index = pinecone.Index(process.env.NEXT_PUBLIC_PINECONE_INDEX!);
+  const index = pinecone.Index(process.env.PINECONE_INDEX!);
   
   const embeddings = new OpenAIEmbeddings({
-    openAIApiKey: process.env.NEXT_PUBLIC_OPENAI_API_KEY
+    openAIApiKey: process.env.OPENAI_API_KEY
   });
 
   const docs = messages.map(message => 
@@ -57,10 +56,10 @@ export const indexMessages = async (messages: Message[]) => {
 
 export const queryMessages = async (query: string) => {
   const pinecone = await initPinecone();
-  const index = pinecone.Index(process.env.NEXT_PUBLIC_PINECONE_INDEX!);
+  const index = pinecone.Index(process.env.PINECONE_INDEX!);
   
   const embeddings = new OpenAIEmbeddings({
-    openAIApiKey: process.env.NEXT_PUBLIC_OPENAI_API_KEY
+    openAIApiKey: process.env.OPENAI_API_KEY
   });
 
   const vectorStore = await PineconeStore.fromExistingIndex(embeddings, {
@@ -82,10 +81,10 @@ export const queryMessages = async (query: string) => {
 
 export const generateAIResponse = async (query: string, channelId: number) => {
   const pinecone = await initPinecone();
-  const index = pinecone.Index(process.env.NEXT_PUBLIC_PINECONE_INDEX!);
+  const index = pinecone.Index(process.env.PINECONE_INDEX!);
   
   const embeddings = new OpenAIEmbeddings({
-    openAIApiKey: process.env.NEXT_PUBLIC_OPENAI_API_KEY
+    openAIApiKey: process.env.OPENAI_API_KEY
   });
 
   const vectorStore = await PineconeStore.fromExistingIndex(embeddings, {
@@ -100,17 +99,19 @@ export const generateAIResponse = async (query: string, channelId: number) => {
     .join('\n');
 
   const chat = new ChatOpenAI({
-    openAIApiKey: process.env.NEXT_PUBLIC_OPENAI_API_KEY,
+    openAIApiKey: process.env.OPENAI_API_KEY,
     temperature: 0.7,
     modelName: 'gpt-3.5-turbo'
   });
 
+  const prompt = `Based on the following chat context:\n\n${context}\n\nQuestion: ${query}\n\nPlease provide a helpful response that accurately reflects the conversation history. If the context doesn't contain relevant information, acknowledge that and provide a general response.`;
+
   const messages = [
     new SystemMessage("You are a helpful AI assistant in a chat application. You help users by providing information based on the chat history and answering their questions."),
-    new HumanMessage(query),
+    new HumanMessage(prompt)
   ];
 
   const response = await chat.invoke(messages);
 
   return response.text || "I couldn't generate a response.";
-};
+}; 

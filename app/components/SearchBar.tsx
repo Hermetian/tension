@@ -2,7 +2,6 @@
 import { useState } from 'react';
 import { useSupabaseClient } from '@supabase/auth-helpers-react';
 import type { Message, DMMessage } from './types';
-import { indexMessages, queryMessages } from '../utils/ragUtils';
 
 interface SearchBarProps {
   chatContext: {
@@ -32,37 +31,47 @@ export default function SearchBar({ chatContext, onResultsFound }: SearchBarProp
         }
 
         if (chatContext.type === 'channel' && chatContext.channel) {
+          // Get messages for indexing
           const { data: messages } = await supabase
             .from('messages')
             .select('*')
             .eq('channel_id', chatContext.channel.id);
 
           if (messages) {
-            await indexMessages(messages);
-            const results = await queryMessages(query);
-            
-            // Convert RAG results to Message format for display
-            const searchResults: Message[] = results.map((result) => {
-              const metadata = result.metadata as { 
-                messageId: number,
-                userId: string,
-                username: string,
-                channelId: number,
-                timestamp: string 
-              };
-              
-              return {
-                id: metadata.messageId,
-                content: result.pageContent,
-                user_id: metadata.userId,
-                username: metadata.username,
-                channel_id: metadata.channelId,
-                created_at: metadata.timestamp,
-                reactions: [],
-              } as Message;
+            // First index the messages
+            const indexResponse = await fetch('/api/ai', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                action: 'index',
+                messages
+              }),
             });
 
-            onResultsFound(searchResults);
+            if (!indexResponse.ok) {
+              throw new Error('Failed to index messages');
+            }
+
+            // Then perform the search
+            const searchResponse = await fetch('/api/ai', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                action: 'search',
+                query
+              }),
+            });
+
+            if (!searchResponse.ok) {
+              throw new Error('Search request failed');
+            }
+
+            const { results } = await searchResponse.json();
+            onResultsFound(results);
           }
         }
         setSearchTerm('');
@@ -116,7 +125,7 @@ export default function SearchBar({ chatContext, onResultsFound }: SearchBarProp
         disabled={isSearching}
         className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
       >
-        {isSearching ? '...' : '��'}
+        {isSearching ? '...' : '🔍'}
       </button>
     </div>
   );

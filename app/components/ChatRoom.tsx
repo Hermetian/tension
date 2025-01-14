@@ -27,8 +27,6 @@ import SearchBar from './SearchBar';
 import { MessageThread } from './MessageThread';
 import { DMMessageThread } from './DMMessageThread';
 
-import { indexMessages} from '../utils/ragUtils';
-
 interface ChatRoomProps {
   session: Session
 }
@@ -596,10 +594,23 @@ export default function ChatRoom({ session }: ChatRoomProps) {
         return;
       }
 
-      // Index the new message for RAG
+      // Index the new message for RAG using the API route
       if (data) {
         try {
-          await indexMessages(data);
+          const indexResponse = await fetch('/api/ai', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              action: 'index',
+              messages: data
+            }),
+          });
+
+          if (!indexResponse.ok) {
+            console.error('Error indexing message');
+          }
         } catch (error) {
           console.error('Error indexing message:', error);
         }

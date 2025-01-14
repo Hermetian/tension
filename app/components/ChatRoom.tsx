@@ -27,7 +27,7 @@ import SearchBar from './SearchBar';
 import { MessageThread } from './MessageThread';
 import { DMMessageThread } from './DMMessageThread';
 
-import { indexMessages, generateAIResponse } from '../utils/ragUtils';
+import { indexMessages} from '../utils/ragUtils';
 
 interface ChatRoomProps {
   session: Session

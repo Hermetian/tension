@@ -455,14 +455,28 @@ export default function ChatRoom({ session }: ChatRoomProps) {
         try {
           showNotification('AI is thinking...', 'info');
           
-          // Get AI response
-          const aiResponse = await generateAIResponse(query, chatContext.channel.id);
+          // Call the API route instead of direct function
+          const response = await fetch('/api/ai', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              action: 'generate',
+              query,
+              channelId: chatContext.channel.id
+            }),
+          });
 
+          if (!response.ok) throw new Error('AI request failed');
+          
+          const data = await response.json();
+          
           // Send AI response as a message
           const { error } = await supabase
             .from('messages')
             .insert([{
-              content: `Q: ${query}\n\nA: ${aiResponse}`,
+              content: `Q: ${query}\n\nA: ${data.response}`,
               user_id: session.user.id,
               username: 'AI Assistant',
               channel_id: chatContext.channel.id

@@ -16,7 +16,7 @@ interface MessageMetadata {
 
 const initPinecone = async () => {
   const pinecone = new Pinecone({
-    apiKey: process.env.NEXT_PUBLIC_PINECONE_API_KEY!
+    apiKey: process.env.PINECONE_API_KEY!
   });
   return pinecone;
 };
@@ -26,7 +26,7 @@ export const indexMessages = async (messages: Message[]) => {
   const index = pinecone.Index(process.env.NEXT_PUBLIC_PINECONE_INDEX!);
   
   const embeddings = new OpenAIEmbeddings({
-    openAIApiKey: process.env.NEXT_PUBLIC_OPENAI_API_KEY
+    openAIApiKey: process.env.OPENAI_API_KEY
   });
 
   const docs = messages.map(message => 
@@ -60,7 +60,7 @@ export const queryMessages = async (query: string) => {
   const index = pinecone.Index(process.env.NEXT_PUBLIC_PINECONE_INDEX!);
   
   const embeddings = new OpenAIEmbeddings({
-    openAIApiKey: process.env.NEXT_PUBLIC_OPENAI_API_KEY
+    openAIApiKey: process.env.OPENAI_API_KEY
   });
 
   const vectorStore = await PineconeStore.fromExistingIndex(embeddings, {
@@ -85,7 +85,7 @@ export const generateAIResponse = async (query: string, channelId: number) => {
   const index = pinecone.Index(process.env.NEXT_PUBLIC_PINECONE_INDEX!);
   
   const embeddings = new OpenAIEmbeddings({
-    openAIApiKey: process.env.NEXT_PUBLIC_OPENAI_API_KEY
+    openAIApiKey: process.env.OPENAI_API_KEY
   });
 
   const vectorStore = await PineconeStore.fromExistingIndex(embeddings, {

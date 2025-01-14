@@ -71,7 +71,19 @@ export default function SearchBar({ chatContext, onResultsFound }: SearchBarProp
             }
 
             const { results } = await searchResponse.json();
-            onResultsFound(results);
+            
+            // Convert RAG results to Message format
+            const formattedResults: Message[] = results.map((result: any) => ({
+              id: result.metadata.messageId,
+              content: result.pageContent,
+              user_id: result.metadata.userId,
+              username: result.metadata.username,
+              channel_id: result.metadata.channelId,
+              created_at: result.metadata.timestamp,
+              reactions: []
+            }));
+
+            onResultsFound(formattedResults);
           }
         }
         setSearchTerm('');

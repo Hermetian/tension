@@ -1,9 +1,9 @@
 // app/utils/ragUtils.ts
-import { OpenAI } from '@langchain/openai';
+import { OpenAIEmbeddings, ChatOpenAI } from '@langchain/openai';
 import { PineconeStore } from '@langchain/pinecone';
-import { OpenAIEmbeddings } from '@langchain/openai';
 import { Pinecone } from '@pinecone-database/pinecone';
 import { Document } from '@langchain/core/documents';
+import { HumanMessage, SystemMessage } from '@langchain/core/messages';
 
 const initPinecone = async () => {
   const pinecone = new Pinecone({
@@ -67,4 +67,53 @@ export const queryMessages = async (query: string) => {
   );
 
   return uniqueResults.slice(0, 5);
+};
+
+export const generateAIResponse = async (query: string, channelId: number) => {
+  const pinecone = await initPinecone();
+  const index = pinecone.Index(process.env.NEXT_PUBLIC_PINECONE_INDEX!);
+  
+  const embeddings = new OpenAIEmbeddings({
+    openAIApiKey: process.env.NEXT_PUBLIC_OPENAI_API_KEY
+  });
+
+  const vectorStore = await PineconeStore.fromExistingIndex(embeddings, {
+    pineconeIndex: index,
+    namespace: channelId.toString()
+  });
+
+  // Get relevant context from previous messages
+  const contextResults = await vectorStore.similaritySearch(query, 5);
+  
+  // Format context for the prompt
+  const context = contextResults
+    .map(result => `${result.metadata.username}: ${result.pageContent}`)
+    .join('\n');
+
+  // Create ChatOpenAI instance
+  const chat = new ChatOpenAI({
+    openAIApiKey: process.env.NEXT_PUBLIC_OPENAI_API_KEY,
+    temperature: 0.7,
+    modelName: 'gpt-3.5-turbo' // or 'gpt-4' if available
+  });
+
+  // Generate response using context
+  const prompt = `Based on the following chat context:
+  
+${context}
+
+Question: ${query}
+
+Please provide a helpful response that accurately reflects the conversation history. If the context doesn't contain relevant information, acknowledge that and provide a general response.
+
+Response:`;
+
+  const messages = [
+    new SystemMessage("You are a helpful AI assistant in a chat application. You help users by providing information based on the chat history and answering their questions."),
+    new HumanMessage(prompt),
+  ];
+
+  const response = await chat.call(messages);
+
+  return response.text || "I couldn't generate a response.";
 };

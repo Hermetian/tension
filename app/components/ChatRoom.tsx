@@ -27,8 +27,7 @@ import SearchBar from './SearchBar';
 import { MessageThread } from './MessageThread';
 import { DMMessageThread } from './DMMessageThread';
 
-import AIChatHelper from './AIChatHelper';
-import { indexMessages, queryMessages } from '../utils/ragUtils';
+import { indexMessages, generateAIResponse } from '../utils/ragUtils';
 
 interface ChatRoomProps {
   session: Session
@@ -443,6 +442,47 @@ export default function ChatRoom({ session }: ChatRoomProps) {
   const sendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newMessage.trim()) return;
+
+    // Handle AI chat command
+    if (newMessage.trim().startsWith('/ai ')) {
+      const query = newMessage.slice(4).trim();
+      if (!query) {
+        showNotification('Please provide a query after /ai', 'error');
+        return;
+      }
+
+      if (chatContext.type === 'channel' && chatContext.channel) {
+        try {
+          showNotification('AI is thinking...', 'info');
+          
+          // Get AI response
+          const aiResponse = await generateAIResponse(query, chatContext.channel.id);
+
+          // Send AI response as a message
+          const { error } = await supabase
+            .from('messages')
+            .insert([{
+              content: `Q: ${query}\n\nA: ${aiResponse}`,
+              user_id: session.user.id,
+              username: 'AI Assistant',
+              channel_id: chatContext.channel.id
+            }]);
+
+          if (error) {
+            console.error('Error sending AI response:', error);
+            showNotification('Error sending AI response', 'error');
+            return;
+          }
+
+          setNewMessage('');
+          return;
+        } catch (error) {
+          console.error('Error processing AI query:', error);
+          showNotification('Error processing AI query', 'error');
+          return;
+        }
+      }
+    }
 
     // Handle clear command
     if (newMessage.trim() === '/clear') {

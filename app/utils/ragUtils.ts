@@ -105,9 +105,11 @@ export const generateAIResponse = async (query: string, channelId: number) => {
     modelName: 'gpt-3.5-turbo'
   });
 
+  const prompt = `Based on the following chat context:\n\n${context}\n\nQuestion: ${query}\n\nPlease provide a helpful response that accurately reflects the conversation history.`;
+
   const messages = [
     new SystemMessage("You are a helpful AI assistant in a chat application. You help users by providing information based on the chat history and answering their questions."),
-    new HumanMessage(query),
+    new HumanMessage(prompt)
   ];
 
   const response = await chat.invoke(messages);

@@ -12,6 +12,17 @@ interface SearchBarProps {
   onResultsFound: (results: (Message | DMMessage)[]) => void;
 }
 
+interface RAGSearchResult {
+  pageContent: string;
+  metadata: {
+    messageId: number;
+    userId: string;
+    username: string;
+    channelId: number;
+    timestamp: string;
+  };
+}
+
 export default function SearchBar({ chatContext, onResultsFound }: SearchBarProps) {
   const supabase = useSupabaseClient();
   const [searchTerm, setSearchTerm] = useState('');
@@ -73,7 +84,7 @@ export default function SearchBar({ chatContext, onResultsFound }: SearchBarProp
             const { results } = await searchResponse.json();
             
             // Convert RAG results to Message format
-            const formattedResults: Message[] = results.map((result: any) => ({
+            const formattedResults: Message[] = results.map((result: RAGSearchResult) => ({
               id: result.metadata.messageId,
               content: result.pageContent,
               user_id: result.metadata.userId,

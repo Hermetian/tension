@@ -4,6 +4,15 @@ import { PineconeStore } from '@langchain/pinecone';
 import { Pinecone } from '@pinecone-database/pinecone';
 import { Document } from '@langchain/core/documents';
 import { HumanMessage, SystemMessage } from '@langchain/core/messages';
+import { Message } from '../components/types';
+
+interface MessageMetadata {
+  messageId: number;
+  userId: string;
+  username: string;
+  channelId: number;
+  timestamp: string;
+}
 
 const initPinecone = async () => {
   const pinecone = new Pinecone({
@@ -12,7 +21,7 @@ const initPinecone = async () => {
   return pinecone;
 };
 
-export const indexMessages = async (messages: any[]) => {
+export const indexMessages = async (messages: Message[]) => {
   const pinecone = await initPinecone();
   const index = pinecone.Index(process.env.NEXT_PUBLIC_PINECONE_INDEX!);
   
@@ -29,7 +38,7 @@ export const indexMessages = async (messages: any[]) => {
         username: message.username,
         channelId: message.channel_id,
         timestamp: message.created_at
-      }
+      } as MessageMetadata
     })
   );
 
@@ -60,11 +69,13 @@ export const queryMessages = async (query: string) => {
 
   const results = await vectorStore.similaritySearch(query, 10);
 
-  const uniqueResults = results.filter((result, index, self) =>
-    index === self.findIndex((r) => 
-      (r.metadata as any).messageId === (result.metadata as any).messageId
-    )
-  );
+  const uniqueResults = results.filter((result, index, self) => {
+    const currentMetadata = result.metadata as MessageMetadata;
+    return index === self.findIndex((r) => {
+      const rMetadata = r.metadata as MessageMetadata;
+      return currentMetadata.messageId === rMetadata.messageId;
+    });
+  });
 
   return uniqueResults.slice(0, 5);
 };

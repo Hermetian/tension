@@ -27,6 +27,9 @@ import SearchBar from './SearchBar';
 import { MessageThread } from './MessageThread';
 import { DMMessageThread } from './DMMessageThread';
 
+import AIChatHelper from './AIChatHelper';
+import { indexMessages, queryMessages } from '../utils/ragUtils';
+
 interface ChatRoomProps {
   session: Session
 }
@@ -523,24 +526,33 @@ export default function ChatRoom({ session }: ChatRoomProps) {
     }
   
     if (chatContext.type === 'channel' && chatContext.channel) {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('messages')
-        .insert([
-          {
-            content: newMessage,
-            user_id: session.user.id,
-            username: session.user.email,
-            channel_id: chatContext.channel.id,
-            parent_message_id: replyingTo  // Add this line
-          }
-        ])
-  
+        .insert([{
+          content: newMessage,
+          user_id: session.user.id,
+          username: session.user.email,
+          channel_id: chatContext.channel.id,
+          parent_message_id: replyingTo
+        }])
+        .select();
+
       if (error) {
         console.error('Error sending message:', error);
         return;
       }
+
+      // Index the new message for RAG
+      if (data) {
+        try {
+          await indexMessages(data);
+        } catch (error) {
+          console.error('Error indexing message:', error);
+        }
+      }
+
       setNewMessage('');
-      setReplyingTo(null);  // Clear reply state after sending
+      setReplyingTo(null);
     }
   
     else if (chatContext.type === 'dm' && chatContext.dmChannel) {
@@ -581,19 +593,19 @@ export default function ChatRoom({ session }: ChatRoomProps) {
     
         const messageResult = await supabase
           .from('dm_messages')
-          .insert([
-            {
-              content: newMessage,
-              sender_id: session.user.id,
-              dm_channel_id: channelCheck.id
-            }
-          ])
+          .insert([{
+            content: newMessage,
+            sender_id: session.user.id,
+            dm_channel_id: channelCheck.id
+          }])
           .select();
     
         if (messageResult.error) {
           console.error('Error sending DM:', messageResult.error);
           return;
         }
+
+        setNewMessage('');
       } catch (error) {
         console.error('Error in DM handling:', error);
       }

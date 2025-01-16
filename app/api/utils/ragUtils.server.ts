@@ -50,7 +50,7 @@ export const indexMessages = async (messages: Message[]) => {
     chunkOverlap: 200
   });
 
-  let allDocs: Document[] = [];
+  const allDocs: Document[] = [];
   for (const message of messages) {
     const splitTexts = await textSplitter.splitText(message.content);
     const docs = splitTexts.map((text, idx) => 
@@ -259,8 +259,6 @@ export const generateAIResponse = async (query: string, channelId: number) => {
       return `[From PDF: ${metadata.fileName}, Page ${metadata.pageNumber}]: ${result.pageContent}`;
     })
     .join('\n');
-
-  const combinedContext = [messageContext, pdfContext].filter(Boolean).join('\n\n');
 
   const chat = new ChatOpenAI({
     openAIApiKey: process.env.OPENAI_API_KEY,

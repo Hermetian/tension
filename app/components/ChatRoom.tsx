@@ -1,3 +1,4 @@
+//app/components/ChatRoom.tsx
 'use client'
 declare global {
   interface Window {
@@ -745,8 +746,9 @@ export default function ChatRoom({ session }: ChatRoomProps) {
       };
 
       // Send message with file attachment
+      let messageData;
       if (chatContext.type === 'channel' && chatContext.channel) {
-        await supabase
+        const { data, error } = await supabase
           .from('messages')
           .insert([{
             content: `Shared file: ${file.name}`,
@@ -754,7 +756,35 @@ export default function ChatRoom({ session }: ChatRoomProps) {
             username: session.user.email,
             channel_id: chatContext.channel.id,
             file: fileAttachment
-          }]);
+          }])
+          .select();
+          
+        if (error) throw error;
+        messageData = data;
+
+        // Process PDF if applicable
+        if (file.type === 'application/pdf') {
+          try {
+            await fetch('/api/ai', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                action: 'processPDF',
+                filePath: publicUrl,
+                fileId: messageData[0].id.toString(),
+                fileName: file.name,
+                channelId: chatContext.channel.id,
+                uploaderId: session.user.id,
+                uploaderName: session.user.email
+              }),
+            });
+          } catch (error) {
+            console.error('Error processing PDF:', error);
+            showNotification('PDF uploaded but indexing failed', 'error');
+          }
+        }
       } else if (chatContext.type === 'dm' && chatContext.dmChannel) {
         await supabase
           .from('dm_messages')

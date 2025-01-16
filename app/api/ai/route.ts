@@ -1,28 +1,33 @@
 import { NextResponse } from 'next/server';
-import { generateAIResponse, indexMessages, queryMessages } from '../utils/ragUtils.server';
+import { indexMessages, generateAIResponse, processPDF, queryMessages } from '../utils/ragUtils.server';
 
-export async function POST(req: Request) {
+export async function POST(request: Request) {
   try {
-    const { action, query, channelId, messages } = await req.json();
+    const body = await request.json();
+    const { action } = body;
 
-    switch (action) {
-      case 'generate':
-        const response = await generateAIResponse(query, channelId);
-        return NextResponse.json({ response });
-      
-      case 'index':
-        await indexMessages(messages);
-        return NextResponse.json({ success: true });
-      
-      case 'search':
-        const results = await queryMessages(query);
-        return NextResponse.json({ results });
-      
-      default:
-        return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
+    if (action === 'index') {
+      await indexMessages(body.messages);
+      return NextResponse.json({ success: true });
+    } 
+    else if (action === 'generate') {
+      const response = await generateAIResponse(body.query, body.channelId);
+      return NextResponse.json({ response });
+    }
+    else if (action === 'processPDF') {
+      const { filePath, fileId, fileName, channelId, uploaderId, uploaderName } = body;
+      const numChunks = await processPDF(filePath, fileId, fileName, channelId, uploaderId, uploaderName);
+      return NextResponse.json({ success: true, numChunks });
+    }
+    else if (action === 'search') {
+      const results = await queryMessages(body.query, body.channelId);
+      return NextResponse.json({ results });
+    }
+    else {
+      return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
     }
   } catch (error) {
-    console.error('AI API error:', error);
+    console.error('Error in AI route:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 } 

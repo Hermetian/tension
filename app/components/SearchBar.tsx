@@ -73,7 +73,8 @@ export default function SearchBar({ chatContext, onResultsFound }: SearchBarProp
               },
               body: JSON.stringify({
                 action: 'search',
-                query
+                query,
+                channelId: chatContext.channel.id
               }),
             });
 

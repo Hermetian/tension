@@ -24,7 +24,7 @@ export default function UserList({ session, onUserSelect }: UserListProps) {
     // First get user statuses
     const { data: statusData, error: statusError } = await supabase
       .from('user_status')
-      .select('*')
+      .select('*, bot_prompt')
       .gte('last_seen', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString())
 
     if (statusError || !statusData) return
@@ -62,7 +62,8 @@ export default function UserList({ session, onUserSelect }: UserListProps) {
           status: user.status,
           lastSeen: user.last_seen,
           unreadCount,
-          avatar_path: avatarUrl
+          avatar_path: avatarUrl,
+          bot_prompt: user.bot_prompt
         }
       }))
 

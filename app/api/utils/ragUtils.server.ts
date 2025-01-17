@@ -323,12 +323,38 @@ export const getUserMessages = async (userId: string) => {
 };
 
 export const generateAIResponseWithUserContext = async (query: string, otherUserId: string, botPrompt?: string) => {
-  // Get all messages from the other user
-  const userMessages = await getUserMessages(otherUserId);
+  const pinecone = await initPinecone();
+  const index = pinecone.Index(process.env.PINECONE_INDEX!);
   
-  // Format context from user messages
-  const messageContext = userMessages
-    .map(result => `${result.metadata.username}: ${result.pageContent}`)
+  const embeddings = new OpenAIEmbeddings({
+    openAIApiKey: process.env.OPENAI_API_KEY
+  });
+
+  // Create vector store for similarity search
+  const vectorStore = await PineconeStore.fromExistingIndex(embeddings, { 
+    pineconeIndex: index
+  });
+
+  // Perform similarity search across all namespaces
+  const similarityResults = await vectorStore.similaritySearch(query, 10);
+
+  // Filter results to only include messages from the other user
+  const relevantResults = similarityResults.filter(doc => 
+    doc.metadata.userId === otherUserId
+  );
+
+  // Format context from relevant messages
+  const messageContext = relevantResults
+    .map(result => {
+      const metadata = result.metadata as MessageMetadata | PDFMetadata;
+      if ('fileName' in metadata) {
+        // It's a PDF document
+        return `[From PDF "${metadata.fileName}"]: ${result.pageContent}`;
+      } else {
+        // It's a message
+        return `${metadata.username}: ${result.pageContent}`;
+      }
+    })
     .join('\n');
 
   const chat = new ChatOpenAI({
@@ -339,13 +365,13 @@ export const generateAIResponseWithUserContext = async (query: string, otherUser
 
   const systemPrompt = botPrompt || "You are a helpful AI assistant in a chat application. You help users by providing information based on the conversation history.";
 
-  const prompt = `Based on the following context of messages from the user:
+  const prompt = `Based on the following relevant context from the user's messages and files:
 
 ${messageContext}
 
 Question: ${query}
 
-Please provide a helpful response that accurately reflects the user's communication style and knowledge based on their message history.`;
+Please provide a helpful response that accurately reflects the user's communication style and knowledge based on their message history. If the context contains relevant information from files or previous messages, incorporate that into your response.`;
 
   console.log('Generating AI response with:', {
     systemPrompt,

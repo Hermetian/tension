@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { indexMessages, generateAIResponse, processPDF, queryMessages, generateAIResponseWithUserContext } from '../utils/ragUtils.server';
+import { indexMessages, generateAIResponse, processPDF, queryMessages, generateAIResponseWithUserContext } from '@/app/api/utils/ragUtils.server';
 
 export async function POST(request: Request) {
   try {

@@ -5,7 +5,7 @@ import { Document } from '@langchain/core/documents';
 import { HumanMessage, SystemMessage } from '@langchain/core/messages';
 import { PDFLoader } from '@langchain/community/document_loaders/fs/pdf';
 import { RecursiveCharacterTextSplitter } from 'langchain/text_splitter';
-import { Message } from '../../components/types';
+import { Message } from '@/app/components/types';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';

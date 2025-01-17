@@ -16,9 +16,10 @@ export interface UserPresence {
     username: string;
     channel_id: number;
     created_at: string;
+    parent_message_id?: number | null;
     file?: FileAttachment;
-    parent_message_id?: number;  // Add this for threading support
     reactions?: MessageReaction[];
+    audio?: string;  // Base64 encoded audio data
   }
   
   export interface MessageReaction {
@@ -54,6 +55,7 @@ export interface UserPresence {
     created_at: string;
     file?: FileAttachment;
     reactions?: MessageReaction[];
+    audio?: string;  // Base64 encoded audio data
   }
 
   export type ChatContext = {

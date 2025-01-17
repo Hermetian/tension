@@ -444,10 +444,29 @@ export default function ChatRoom({ session }: ChatRoomProps) {
     e.preventDefault();
     if (!newMessage.trim()) return;
 
+    let messageContent = newMessage.trim();
+    let shouldGenerateAudio = false;
+    let aiQuery = '';
+
+    // Check for commands in any order
+    const commands = messageContent.split(' ');
+    const commandSet = new Set(commands.slice(0, 2)); // Only look at first two potential commands
+
+    // Check for /say command
+    if (commandSet.has('/say')) {
+      shouldGenerateAudio = true;
+      messageContent = commands.slice(commandSet.has('/ai') ? 2 : 1).join(' ');
+    }
+
+    // Check for /ai command
+    if (commandSet.has('/ai')) {
+      aiQuery = commands.slice(commandSet.has('/say') ? 2 : 1).join(' ');
+      messageContent = aiQuery;
+    }
+
     // Handle AI chat command
-    if (newMessage.trim().startsWith('/ai ')) {
-      const query = newMessage.slice(4).trim();
-      if (!query) {
+    if (aiQuery) {
+      if (!aiQuery) {
         showNotification('Please provide a query after /ai', 'error');
         return;
       }
@@ -464,7 +483,7 @@ export default function ChatRoom({ session }: ChatRoomProps) {
             },
             body: JSON.stringify({
               action: 'generate',
-              query,
+              query: aiQuery,
               channelId: chatContext.channel.id
             }),
           });
@@ -472,15 +491,44 @@ export default function ChatRoom({ session }: ChatRoomProps) {
           if (!response.ok) throw new Error('AI request failed');
           
           const data = await response.json();
+          messageContent = `Q: ${aiQuery}\n\nA: ${data.response}`;
+
+          // Generate audio if /say was used
+          let audioData;
+          if (shouldGenerateAudio) {
+            try {
+              const ttsResponse = await fetch('/api/ai', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  action: 'tts',
+                  text: data.response,
+                }),
+              });
+
+              if (!ttsResponse.ok) {
+                const errorData = await ttsResponse.json();
+                throw new Error(errorData.error || 'TTS request failed');
+              }
+              const ttsData = await ttsResponse.json();
+              audioData = ttsData.audio;
+            } catch (error) {
+              console.error('Error generating audio:', error);
+              showNotification('Error generating audio: ' + (error instanceof Error ? error.message : 'Unknown error'), 'error');
+            }
+          }
           
           // Send AI response as a message
           const { error } = await supabase
             .from('messages')
             .insert([{
-              content: `Q: ${query}\n\nA: ${data.response}`,
+              content: messageContent,
               user_id: session.user.id,
               username: 'AI Assistant',
-              channel_id: chatContext.channel.id
+              channel_id: chatContext.channel.id,
+              audio: audioData
             }]);
 
           if (error) {
@@ -508,7 +556,7 @@ export default function ChatRoom({ session }: ChatRoomProps) {
             },
             body: JSON.stringify({
               action: 'generateDM',
-              query,
+              query: aiQuery,
               otherUserId: chatContext.otherUser.id,
               botPrompt: chatContext.otherUser.bot_prompt
             }),
@@ -517,15 +565,44 @@ export default function ChatRoom({ session }: ChatRoomProps) {
           if (!response.ok) throw new Error('AI request failed');
           
           const data = await response.json();
+          messageContent = data.response;
+
+          // Generate audio if /say was used
+          let audioData;
+          if (shouldGenerateAudio) {
+            try {
+              const ttsResponse = await fetch('/api/ai', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  action: 'tts',
+                  text: data.response,
+                }),
+              });
+
+              if (!ttsResponse.ok) {
+                const errorData = await ttsResponse.json();
+                throw new Error(errorData.error || 'TTS request failed');
+              }
+              const ttsData = await ttsResponse.json();
+              audioData = ttsData.audio;
+            } catch (error) {
+              console.error('Error generating audio:', error);
+              showNotification('Error generating audio: ' + (error instanceof Error ? error.message : 'Unknown error'), 'error');
+            }
+          }
           
           // Send AI response as a message from the other user
           const { error } = await supabase
             .from('dm_messages')
             .insert({
-              content: data.response,
+              content: messageContent,
               sender_id: chatContext.otherUser.id,
               dm_channel_id: chatContext.dmChannel.id,
-              created_at: new Date().toISOString()
+              created_at: new Date().toISOString(),
+              audio: audioData
             });
 
           if (error) {
@@ -545,7 +622,7 @@ export default function ChatRoom({ session }: ChatRoomProps) {
     }
 
     // Handle clear command
-    if (newMessage.trim() === '/clear') {
+    if (messageContent === '/clear') {
       console.log('Clear command detected'); // Debug log
       try {
         if (chatContext.type === 'channel') {
@@ -625,56 +702,89 @@ export default function ChatRoom({ session }: ChatRoomProps) {
       }
     }
   
+    // Handle regular messages
     if (chatContext.type === 'channel' && chatContext.channel) {
-      // Get user's display name first
-      const { data: userData } = await supabase
-        .from('user_status')
-        .select('display_name')
-        .eq('user_id', session.user.id)
-        .single();
+      try {
+        // Get user's display name first
+        const { data: userData } = await supabase
+          .from('user_status')
+          .select('display_name')
+          .eq('user_id', session.user.id)
+          .single();
 
-      const { data, error } = await supabase
-        .from('messages')
-        .insert([{
-          content: newMessage,
-          user_id: session.user.id,
-          username: userData?.display_name || session.user.email,
-          channel_id: chatContext.channel.id,
-          parent_message_id: replyingTo
-        }])
-        .select();
+        // Generate audio if /say was used
+        let audioData;
+        if (shouldGenerateAudio) {
+          try {
+            const ttsResponse = await fetch('/api/ai', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                action: 'tts',
+                text: messageContent,
+              }),
+            });
 
-      if (error) {
+            if (!ttsResponse.ok) {
+              const errorData = await ttsResponse.json();
+              throw new Error(errorData.error || 'TTS request failed');
+            }
+            const ttsData = await ttsResponse.json();
+            audioData = ttsData.audio;
+          } catch (error) {
+            console.error('Error generating audio:', error);
+            showNotification('Error generating audio: ' + (error instanceof Error ? error.message : 'Unknown error'), 'error');
+          }
+        }
+
+        const { data, error } = await supabase
+          .from('messages')
+          .insert([{
+            content: messageContent,
+            user_id: session.user.id,
+            username: userData?.display_name || session.user.email,
+            channel_id: chatContext.channel.id,
+            parent_message_id: replyingTo,
+            audio: audioData
+          }])
+          .select();
+
+        if (error) {
+          throw error;
+        }
+
+        // Index the new message for RAG using the API route
+        if (data) {
+          try {
+            const indexResponse = await fetch('/api/ai', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                action: 'index',
+                messages: data
+              }),
+            });
+
+            if (!indexResponse.ok) {
+              console.error('Error indexing message');
+            }
+          } catch (error) {
+            console.error('Error indexing message:', error);
+          }
+        }
+
+        setNewMessage('');
+        setReplyingTo(null);
+      } catch (error) {
         console.error('Error sending message:', error);
+        showNotification('Error sending message: ' + (error instanceof Error ? error.message : 'Unknown error'), 'error');
         return;
       }
-
-      // Index the new message for RAG using the API route
-      if (data) {
-        try {
-          const indexResponse = await fetch('/api/ai', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              action: 'index',
-              messages: data
-            }),
-          });
-
-          if (!indexResponse.ok) {
-            console.error('Error indexing message');
-          }
-        } catch (error) {
-          console.error('Error indexing message:', error);
-        }
-      }
-
-      setNewMessage('');
-      setReplyingTo(null);
     }
-  
     else if (chatContext.type === 'dm' && chatContext.dmChannel) {
       console.log('Sending DM, current user:', session.user.id);
       console.log('DM Channel before update:', chatContext.dmChannel);
@@ -691,21 +801,40 @@ export default function ChatRoom({ session }: ChatRoomProps) {
           console.error('Could not find DM channel:', checkError);
           return;
         }
-    
-        //console.log('Found DM channel:', channelCheck);
+
+        // Generate audio if /say was used
+        let audioData;
+        if (shouldGenerateAudio) {
+          try {
+            const ttsResponse = await fetch('/api/ai', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                action: 'tts',
+                text: messageContent,
+              }),
+            });
+
+            if (!ttsResponse.ok) throw new Error('TTS request failed');
+            const ttsData = await ttsResponse.json();
+            audioData = ttsData.audio;
+          } catch (error) {
+            console.error('Error generating audio:', error);
+            showNotification('Error generating audio', 'error');
+          }
+        }
     
         // Split into separate update and message operations
         const updateResult = await supabase
-        .from('dm_channels')
-        .update({
-          unread_count: (channelCheck.unread_count || 0) + 1,
-          last_message_from: session.user.id
-        })
-        .match({ id: channelCheck.id }); // Use match instead of eq
-      
-      //console.log('Update operation result:', updateResult);
-    
-        // If update succeeded, send the message
+          .from('dm_channels')
+          .update({
+            unread_count: (channelCheck.unread_count || 0) + 1,
+            last_message_from: session.user.id
+          })
+          .match({ id: channelCheck.id }); // Use match instead of eq
+        
         if (updateResult.error) {
           console.error('Error updating unread count:', updateResult.error);
           return;
@@ -714,9 +843,10 @@ export default function ChatRoom({ session }: ChatRoomProps) {
         const messageResult = await supabase
           .from('dm_messages')
           .insert([{
-            content: newMessage,
+            content: messageContent,
             sender_id: session.user.id,
-            dm_channel_id: channelCheck.id
+            dm_channel_id: channelCheck.id,
+            audio: audioData
           }])
           .select();
     

@@ -4,6 +4,7 @@ import { FileAttachment, DMMessage, UserPresence } from './types';
 import { useSupabaseClient } from '@supabase/auth-helpers-react';
 import EmojiPicker, { EmojiClickData } from 'emoji-picker-react';
 import Image from 'next/image';
+import { AudioPlayer } from './AudioPlayer';
 
 interface DMMessageThreadProps {
   message: DMMessage;
@@ -244,6 +245,11 @@ export function DMMessageThread({
               </div>
               <p>{message.content}</p>
               {message.file && renderFileAttachment(message.file)}
+              {message.audio && (
+                <div className="mt-2">
+                  <AudioPlayer audioData={message.audio} />
+                </div>
+              )}
               {renderReactions(message)}
             </div>
           </div>

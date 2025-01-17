@@ -4,6 +4,7 @@ import { Message, FileAttachment } from './types';
 import { useSupabaseClient } from '@supabase/auth-helpers-react';
 import EmojiPicker, { EmojiClickData } from 'emoji-picker-react';
 import Image from 'next/image';
+import { AudioPlayer } from './AudioPlayer';
 
 interface MessageThreadProps {
   message: Message;
@@ -137,6 +138,11 @@ export function MessageThread({
                 </div>
                 <p>{msg.content}</p>
                 {msg.file && renderFileAttachment(msg.file)}
+                {msg.audio && (
+                  <div className="mt-2">
+                    <AudioPlayer audioData={msg.audio} />
+                  </div>
+                )}
                 {/* Render reactions */}
                 {msg.reactions && msg.reactions.length > 0 && (
                   <div className="mt-1 flex space-x-2">

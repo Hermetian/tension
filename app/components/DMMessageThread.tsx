@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { FileAttachment, DMMessage, UserPresence } from './types';
 import { useSupabaseClient } from '@supabase/auth-helpers-react';
 import EmojiPicker, { EmojiClickData } from 'emoji-picker-react';
@@ -24,7 +24,7 @@ export function DMMessageThread({
   const [userAvatars, setUserAvatars] = useState<{ [userId: string]: string }>({});
 
   // Function to fetch user avatar
-  const fetchUserAvatar = async (userId: string) => {
+  const fetchUserAvatar = useCallback(async (userId: string) => {
     if (userAvatars[userId]) return;
 
     try {
@@ -57,12 +57,12 @@ export function DMMessageThread({
         console.error('Unknown error fetching user avatar:', error);
       }
     }
-  };
+  }, [supabase, userAvatars]);
 
   // Fetch current user's avatar
   useEffect(() => {
     fetchUserAvatar(currentUserId);
-  }, [currentUserId]);
+  }, [currentUserId, fetchUserAvatar]);
 
   // Function to handle adding a reaction
   const addReaction = async (emoji: string, messageId: number) => {

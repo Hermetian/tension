@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Message, FileAttachment } from './types';
 import { useSupabaseClient } from '@supabase/auth-helpers-react';
 import EmojiPicker, { EmojiClickData } from 'emoji-picker-react';
@@ -26,7 +26,7 @@ export function MessageThread({
   const [userAvatars, setUserAvatars] = useState<Record<string, string>>({});
 
   // Function to fetch user avatar
-  const fetchUserAvatar = async (userId: string) => {
+  const fetchUserAvatar = useCallback(async (userId: string) => {
     if (userAvatars[userId]) return;
 
     try {
@@ -59,13 +59,13 @@ export function MessageThread({
         console.error('Unknown error fetching user avatar:', error);
       }
     }
-  };
+  }, [supabase, userAvatars]);
 
   // Fetch avatar for message author and reply authors
   useEffect(() => {
     fetchUserAvatar(message.user_id);
     replies.forEach(reply => fetchUserAvatar(reply.user_id));
-  }, [message.user_id, replies]);
+  }, [message.user_id, replies, fetchUserAvatar]);
 
   // Function to render a single message
   const renderMessage = (msg: Message, isReply: boolean = false) => {

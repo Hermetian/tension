@@ -97,11 +97,18 @@ export default function SettingsPage() {
         text: 'Avatar updated successfully!',
         type: 'success'
       })
-    } catch (error: any) {
-      setMessage({
-        text: error.message || 'Error uploading avatar',
-        type: 'error'
-      })
+    } catch (error) {
+      if (error instanceof Error) {
+        setMessage({
+          text: error.message,
+          type: 'error'
+        })
+      } else {
+        setMessage({
+          text: 'Error uploading avatar',
+          type: 'error'
+        })
+      }
     } finally {
       setUploading(false)
     }
@@ -169,11 +176,18 @@ export default function SettingsPage() {
         text: 'Settings updated successfully!',
         type: 'success'
       })
-    } catch (error: any) {
-      setMessage({
-        text: error.message || 'An error occurred while updating settings.',
-        type: 'error'
-      })
+    } catch (error) {
+      if (error instanceof Error) {
+        setMessage({
+          text: error.message,
+          type: 'error'
+        })
+      } else {
+        setMessage({
+          text: 'An error occurred while updating settings.',
+          type: 'error'
+        })
+      }
     } finally {
       setLoading(false)
     }

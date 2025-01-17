@@ -163,18 +163,8 @@ export default function UserList({ session, onUserSelect }: UserListProps) {
                     className="rounded-full"
                   />
                 ) : (
-                  <div className="flex h-6 w-6 items-center justify-center rounded-full bg-gray-200 text-gray-500">
-                    <svg
-                      className="h-4 w-4"
-                      fill="currentColor"
-                      viewBox="0 0 20 20"
-                    >
-                      <path
-                        fillRule="evenodd"
-                        d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z"
-                        clipRule="evenodd"
-                      />
-                    </svg>
+                  <div className="flex h-6 w-6 items-center justify-center rounded-full bg-gray-200 text-gray-500 text-sm font-medium">
+                    {user.display_name.charAt(0).toUpperCase()}
                   </div>
                 )}
                 <div className={`absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-white ${getStatusColor(user.status)}`} />

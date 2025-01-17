@@ -496,6 +496,51 @@ export default function ChatRoom({ session }: ChatRoomProps) {
           showNotification('Error processing AI query', 'error');
           return;
         }
+      } else if (chatContext.type === 'dm' && chatContext.dmChannel && chatContext.otherUser) {
+        try {
+          showNotification('AI is thinking...', 'info');
+          
+          // Call the API route for DM AI response
+          const response = await fetch('/api/ai', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              action: 'generateDM',
+              query,
+              otherUserId: chatContext.otherUser.id,
+              botPrompt: chatContext.otherUser.bot_prompt
+            }),
+          });
+
+          if (!response.ok) throw new Error('AI request failed');
+          
+          const data = await response.json();
+          
+          // Send AI response as a message from the other user
+          const { error } = await supabase
+            .from('dm_messages')
+            .insert({
+              content: data.response,
+              sender_id: chatContext.otherUser.id,
+              dm_channel_id: chatContext.dmChannel.id,
+              created_at: new Date().toISOString()
+            });
+
+          if (error) {
+            console.error('Error sending AI response:', error);
+            showNotification('Error sending AI response', 'error');
+            return;
+          }
+
+          setNewMessage('');
+          return;
+        } catch (error) {
+          console.error('Error processing AI query:', error);
+          showNotification('Error processing AI query', 'error');
+          return;
+        }
       }
     }
 
@@ -929,7 +974,7 @@ export default function ChatRoom({ session }: ChatRoomProps) {
             <h2 className="text-lg font-semibold">
               {chatContext.type === 'channel' 
                 ? `#${chatContext.channel?.name}`
-                : `Chat with ${chatContext.otherUser?.email}`
+                : `Chat with ${chatContext.otherUser?.display_name || chatContext.otherUser?.email}`
               }
             </h2>
             {chatContext.type === 'channel' && chatContext.channel?.description && (
@@ -1015,6 +1060,7 @@ export default function ChatRoom({ session }: ChatRoomProps) {
                     key={message.id}
                     message={message}
                     currentUserId={session.user.id}
+                    otherUser={chatContext.otherUser}
                     renderFileAttachment={renderFileAttachment}
                   />
                 ))
@@ -1070,7 +1116,7 @@ export default function ChatRoom({ session }: ChatRoomProps) {
                     ? "Reply to message"
                     : chatContext.type === 'channel'
                       ? `Message #${chatContext.channel?.name}`
-                      : `Message ${chatContext.otherUser?.email}`
+                      : `Message ${chatContext.otherUser?.display_name || chatContext.otherUser?.email}`
                   }
                   className="w-full rounded-lg border bg-transparent px-4 py-2 focus:border-blue-500 focus:outline-none dark:border-gray-700"
                 />

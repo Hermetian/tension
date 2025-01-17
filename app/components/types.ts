@@ -6,6 +6,7 @@ export interface UserPresence {
     status: 'active' | 'idle' | 'offline'
     lastSeen: string
     unreadCount?: number
+    bot_prompt?: string
   }
   
   export interface Message {

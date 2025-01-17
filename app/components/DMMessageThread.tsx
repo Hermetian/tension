@@ -21,7 +21,7 @@ export function DMMessageThread({
   const supabase = useSupabaseClient();
   const [hoveredMessageId, setHoveredMessageId] = useState<number | null>(null);
   const [showEmojiPickerFor, setShowEmojiPickerFor] = useState<number | null>(null);
-  const [userAvatars, setUserAvatars] = useState<{ [userId: string]: string }>({});
+  const [userAvatars, setUserAvatars] = useState<{ [userId: string]: { url: string | null; display_name: string } }>({});
 
   // Function to fetch user avatar
   const fetchUserAvatar = useCallback(async (userId: string) => {
@@ -30,7 +30,7 @@ export function DMMessageThread({
     try {
       const { data, error } = await supabase
         .from('user_status')
-        .select('avatar_path')
+        .select('avatar_path, display_name')
         .eq('user_id', userId)
         .single();
 
@@ -39,15 +39,22 @@ export function DMMessageThread({
         return;
       }
 
-      if (data?.avatar_path) {
-        // Get public URL for avatar
-        const { data: { publicUrl } } = supabase.storage
-          .from('user-content')
-          .getPublicUrl(data.avatar_path);
+      if (data) {
+        // Get public URL for avatar if it exists
+        let avatarUrl = null;
+        if (data.avatar_path) {
+          const { data: { publicUrl } } = supabase.storage
+            .from('user-content')
+            .getPublicUrl(data.avatar_path);
+          avatarUrl = publicUrl;
+        }
 
         setUserAvatars(prev => ({
           ...prev,
-          [userId]: publicUrl
+          [userId]: {
+            url: avatarUrl,
+            display_name: data.display_name
+          }
         }));
       }
     } catch (error) {
@@ -63,6 +70,13 @@ export function DMMessageThread({
   useEffect(() => {
     fetchUserAvatar(currentUserId);
   }, [currentUserId, fetchUserAvatar]);
+
+  // Fetch other user's avatar
+  useEffect(() => {
+    if (otherUser?.id) {
+      fetchUserAvatar(otherUser.id);
+    }
+  }, [otherUser?.id, fetchUserAvatar]);
 
   // Function to handle adding a reaction
   const addReaction = async (emoji: string, messageId: number) => {
@@ -138,6 +152,53 @@ export function DMMessageThread({
     );
   };
 
+  // Function to get user display name
+  const getUserDisplayName = (userId: string) => {
+    if (userId === currentUserId) return 'You';
+    return userAvatars[userId]?.display_name || otherUser?.display_name || 'Unknown User';
+  };
+
+  // Function to get user avatar URL
+  const getUserAvatarUrl = (userId: string) => {
+    const userAvatar = userAvatars[userId]?.url;
+    if (userAvatar) return userAvatar;
+    
+    // If it's the other user and we have their avatar_path but no URL yet
+    if (userId === otherUser?.id && otherUser?.avatar_path) {
+      const { data: { publicUrl } } = supabase.storage
+        .from('user-content')
+        .getPublicUrl(otherUser.avatar_path);
+      return publicUrl;
+    }
+    
+    return null;
+  };
+
+  // Function to render user avatar
+  const renderAvatar = (userId: string) => {
+    const avatarUrl = getUserAvatarUrl(userId);
+    const displayName = getUserDisplayName(userId);
+
+    if (avatarUrl) {
+      return (
+        <Image
+          src={avatarUrl}
+          alt={displayName}
+          width={32}
+          height={32}
+          className="rounded-full"
+        />
+      );
+    }
+
+    // Fallback avatar with first letter of display name
+    return (
+      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-200 text-gray-500">
+        {displayName.charAt(0).toUpperCase()}
+      </div>
+    );
+  };
+
   return (
     <div
       className={`flex ${message.sender_id === currentUserId ? 'justify-end' : 'justify-start'}`}
@@ -162,101 +223,28 @@ export function DMMessageThread({
             </button>
           </div>
         )}
-        
-        {/* Message content */}
-        <div className="flex items-start space-x-2">
-          {message.sender_id !== currentUserId && (
+
+        <div className={`rounded-lg px-4 py-2 ${
+          message.sender_id === currentUserId 
+            ? 'bg-blue-500 text-white' 
+            : 'bg-gray-100 dark:bg-gray-800'
+        }`}>
+          <div className="flex items-start gap-4">
             <div className="flex-shrink-0">
-              {otherUser?.avatar_path ? (
-                <Image
-                  src={otherUser.avatar_path}
-                  alt={otherUser.display_name}
-                  width={32}
-                  height={32}
-                  className="rounded-full"
-                />
-              ) : (
-                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-200 text-gray-500">
-                  <svg
-                    className="h-5 w-5"
-                    fill="currentColor"
-                    viewBox="0 0 20 20"
-                  >
-                    <path
-                      fillRule="evenodd"
-                      d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z"
-                      clipRule="evenodd"
-                    />
-                  </svg>
-                </div>
-              )}
+              {renderAvatar(message.sender_id)}
             </div>
-          )}
-          <div className={`rounded-lg px-4 py-2 ${
-            message.sender_id === currentUserId 
-              ? 'bg-blue-500 text-white' 
-              : 'bg-gray-100 dark:bg-gray-800'
-          }`}>
-            <div className="flex items-start gap-4">
-              <div className="flex-shrink-0">
-                {message.sender_id === currentUserId ? (
-                  userAvatars[currentUserId] ? (
-                    <Image
-                      src={userAvatars[currentUserId]}
-                      alt="You"
-                      width={32}
-                      height={32}
-                      className="rounded-full"
-                    />
-                  ) : (
-                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-200 text-gray-500">
-                      <svg
-                        className="h-5 w-5"
-                        fill="currentColor"
-                        viewBox="0 0 20 20"
-                      >
-                        <path
-                          fillRule="evenodd"
-                          d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z"
-                          clipRule="evenodd"
-                        />
-                      </svg>
-                    </div>
-                  )
-                ) : (
-                  otherUser?.avatar_path ? (
-                    <Image
-                      src={otherUser.avatar_path}
-                      alt={otherUser.display_name}
-                      width={32}
-                      height={32}
-                      className="rounded-full"
-                    />
-                  ) : (
-                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-200 text-gray-500">
-                      <svg
-                        className="h-5 w-5"
-                        fill="currentColor"
-                        viewBox="0 0 20 20"
-                      >
-                        <path
-                          fillRule="evenodd"
-                          d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z"
-                          clipRule="evenodd"
-                        />
-                      </svg>
-                    </div>
-                  )
-                )}
+            <div className="flex-1">
+              <div className="flex items-baseline justify-between">
+                <span className="text-sm font-medium">
+                  {getUserDisplayName(message.sender_id)}
+                </span>
+                <span className="text-xs opacity-75 ml-4">
+                  {new Date(message.created_at).toLocaleString()}
+                </span>
               </div>
-              <div className="flex-1">
-                <p className="text-sm font-medium">
-                  {message.sender_id === currentUserId ? 'You' : otherUser?.display_name}
-                </p>
-                <p>{message.content}</p>
-                {message.file && renderFileAttachment(message.file)}
-                {renderReactions(message)}
-              </div>
+              <p>{message.content}</p>
+              {message.file && renderFileAttachment(message.file)}
+              {renderReactions(message)}
             </div>
           </div>
         </div>

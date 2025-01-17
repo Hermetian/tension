@@ -286,4 +286,79 @@ Please provide a helpful response that accurately reflects both the conversation
   const response = await chat.invoke(messages);
 
   return response.text || "I couldn't generate a response.";
+};
+
+export const getUserMessages = async (userId: string) => {
+  const pinecone = await initPinecone();
+  const index = pinecone.Index(process.env.PINECONE_INDEX!);
+  
+  const embeddings = new OpenAIEmbeddings({
+    openAIApiKey: process.env.OPENAI_API_KEY
+  });
+
+  let allMessages: Document[] = [];
+  
+  // Search in channel messages
+  const channelVectorStore = await PineconeStore.fromExistingIndex(embeddings, {
+    pineconeIndex: index,
+    namespace: 'channel_messages'
+  });
+
+  const channelMessages = await channelVectorStore.similaritySearch("", 1000, {
+    filter: { userId }
+  });
+  
+  // Search in DM messages
+  const dmVectorStore = await PineconeStore.fromExistingIndex(embeddings, {
+    pineconeIndex: index,
+    namespace: 'dm_messages'
+  });
+
+  const dmMessages = await dmVectorStore.similaritySearch("", 1000, {
+    filter: { userId }
+  });
+
+  allMessages = [...channelMessages, ...dmMessages];
+  return allMessages;
+};
+
+export const generateAIResponseWithUserContext = async (query: string, otherUserId: string, botPrompt?: string) => {
+  // Get all messages from the other user
+  const userMessages = await getUserMessages(otherUserId);
+  
+  // Format context from user messages
+  const messageContext = userMessages
+    .map(result => `${result.metadata.username}: ${result.pageContent}`)
+    .join('\n');
+
+  const chat = new ChatOpenAI({
+    openAIApiKey: process.env.OPENAI_API_KEY,
+    temperature: 0.7,
+    modelName: 'gpt-3.5-turbo-16k'
+  });
+
+  const systemPrompt = botPrompt || "You are a helpful AI assistant in a chat application. You help users by providing information based on the conversation history.";
+
+  const prompt = `Based on the following context of messages from the user:
+
+${messageContext}
+
+Question: ${query}
+
+Please provide a helpful response that accurately reflects the user's communication style and knowledge based on their message history.`;
+
+  console.log('Generating AI response with:', {
+    systemPrompt,
+    messageContext: messageContext.slice(0, 200) + '...', // Log first 200 chars of context
+    query
+  });
+
+  const messages = [
+    new SystemMessage(systemPrompt),
+    new HumanMessage(prompt)
+  ];
+
+  const response = await chat.invoke(messages);
+
+  return response.text || "I couldn't generate a response.";
 }; 

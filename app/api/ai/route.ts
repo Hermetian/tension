@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { indexMessages, generateAIResponse, processPDF, queryMessages } from '../utils/ragUtils.server';
+import { indexMessages, generateAIResponse, processPDF, queryMessages, generateAIResponseWithUserContext } from '../utils/ragUtils.server';
 
 export async function POST(request: Request) {
   try {
@@ -12,6 +12,14 @@ export async function POST(request: Request) {
     } 
     else if (action === 'generate') {
       const response = await generateAIResponse(body.query, body.channelId);
+      return NextResponse.json({ response });
+    }
+    else if (action === 'generateDM') {
+      const response = await generateAIResponseWithUserContext(
+        body.query,
+        body.otherUserId,
+        body.botPrompt
+      );
       return NextResponse.json({ response });
     }
     else if (action === 'processPDF') {

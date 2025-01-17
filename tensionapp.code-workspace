@@ -1,9 +1,6 @@
 {
 	"folders": [
 		{
-			"path": "../SlackCloneProjectDocs"
-		},
-		{
 			"name": "Chat App",
 			"path": "."
 		}

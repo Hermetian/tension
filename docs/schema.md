@@ -57,13 +57,15 @@ Stores messages sent in direct message conversations.
 ### User Status (user_status)
 Tracks user presence and status information.
 
-| Column     | Type       | Constraints                        | Description                 |
-|------------|------------|------------------------------------|-----------------------------|
-| user_id    | uuid       | Primary Key                        | User identifier             |
-| email      | text       | Non-Nullable                       | User's email address        |
-| last_seen  | timestamptz| Non-Nullable                       | When the user was last active|
-| status     | text       | Non-Nullable                       | Current user status         |
-| created_at | timestamptz| Non-Nullable                       | When the status record was created |
+| Column      | Type       | Constraints                        | Description                 |
+|-------------|------------|------------------------------------|-----------------------------|
+| user_id     | uuid       | Primary Key                        | User identifier             |
+| email       | text       | Non-Nullable                       | User's email address        |
+| display_name| text       | Non-Nullable, Default: email       | User's display name         |
+| bot_prompt  | text       | Nullable                           | User's custom bot prompt    |
+| last_seen   | timestamptz| Non-Nullable                       | When the user was last active|
+| status      | text       | Non-Nullable                       | Current user status         |
+| created_at  | timestamptz| Non-Nullable                       | When the status record was created |
 
 ### Message Reactions (message_reactions)
 Stores emoji reactions to messages.

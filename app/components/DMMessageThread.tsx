@@ -1,25 +1,68 @@
 'use client';
-import { useState } from 'react';
-import { FileAttachment, DMMessage } from './types';
+import { useState, useEffect } from 'react';
+import { FileAttachment, DMMessage, UserPresence } from './types';
 import { useSupabaseClient } from '@supabase/auth-helpers-react';
 import EmojiPicker, { EmojiClickData } from 'emoji-picker-react';
+import Image from 'next/image';
 
 interface DMMessageThreadProps {
   message: DMMessage;
   currentUserId: string;
-  otherUserEmail?: string;
+  otherUser?: UserPresence;
   renderFileAttachment: (file: FileAttachment) => React.ReactNode;
 }
 
 export function DMMessageThread({ 
   message, 
   currentUserId,
-  otherUserEmail,
+  otherUser,
   renderFileAttachment 
 }: DMMessageThreadProps) {
   const supabase = useSupabaseClient();
   const [hoveredMessageId, setHoveredMessageId] = useState<number | null>(null);
   const [showEmojiPickerFor, setShowEmojiPickerFor] = useState<number | null>(null);
+  const [userAvatars, setUserAvatars] = useState<{ [userId: string]: string }>({});
+
+  // Function to fetch user avatar
+  const fetchUserAvatar = async (userId: string) => {
+    if (userAvatars[userId]) return;
+
+    try {
+      const { data, error } = await supabase
+        .from('user_status')
+        .select('avatar_path')
+        .eq('user_id', userId)
+        .single();
+
+      if (error) {
+        console.error('Error fetching user avatar:', error.message);
+        return;
+      }
+
+      if (data?.avatar_path) {
+        // Get public URL for avatar
+        const { data: { publicUrl } } = supabase.storage
+          .from('user-content')
+          .getPublicUrl(data.avatar_path);
+
+        setUserAvatars(prev => ({
+          ...prev,
+          [userId]: publicUrl
+        }));
+      }
+    } catch (error) {
+      if (error instanceof Error) {
+        console.error('Error fetching user avatar:', error.message);
+      } else {
+        console.error('Unknown error fetching user avatar:', error);
+      }
+    }
+  };
+
+  // Fetch current user's avatar
+  useEffect(() => {
+    fetchUserAvatar(currentUserId);
+  }, [currentUserId]);
 
   // Function to handle adding a reaction
   const addReaction = async (emoji: string, messageId: number) => {
@@ -121,17 +164,101 @@ export function DMMessageThread({
         )}
         
         {/* Message content */}
-        <div className={`rounded-lg px-4 py-2 ${
-          message.sender_id === currentUserId 
-            ? 'bg-blue-500 text-white' 
-            : 'bg-gray-100 dark:bg-gray-800'
-        }`}>
-          <p className="text-sm font-medium">
-            {message.sender_id === currentUserId ? 'You' : otherUserEmail}
-          </p>
-          <p>{message.content}</p>
-          {message.file && renderFileAttachment(message.file)}
-          {renderReactions(message)}
+        <div className="flex items-start space-x-2">
+          {message.sender_id !== currentUserId && (
+            <div className="flex-shrink-0">
+              {otherUser?.avatar_path ? (
+                <Image
+                  src={otherUser.avatar_path}
+                  alt={otherUser.display_name}
+                  width={32}
+                  height={32}
+                  className="rounded-full"
+                />
+              ) : (
+                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-200 text-gray-500">
+                  <svg
+                    className="h-5 w-5"
+                    fill="currentColor"
+                    viewBox="0 0 20 20"
+                  >
+                    <path
+                      fillRule="evenodd"
+                      d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z"
+                      clipRule="evenodd"
+                    />
+                  </svg>
+                </div>
+              )}
+            </div>
+          )}
+          <div className={`rounded-lg px-4 py-2 ${
+            message.sender_id === currentUserId 
+              ? 'bg-blue-500 text-white' 
+              : 'bg-gray-100 dark:bg-gray-800'
+          }`}>
+            <div className="flex items-start gap-4">
+              <div className="flex-shrink-0">
+                {message.sender_id === currentUserId ? (
+                  userAvatars[currentUserId] ? (
+                    <Image
+                      src={userAvatars[currentUserId]}
+                      alt="You"
+                      width={32}
+                      height={32}
+                      className="rounded-full"
+                    />
+                  ) : (
+                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-200 text-gray-500">
+                      <svg
+                        className="h-5 w-5"
+                        fill="currentColor"
+                        viewBox="0 0 20 20"
+                      >
+                        <path
+                          fillRule="evenodd"
+                          d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z"
+                          clipRule="evenodd"
+                        />
+                      </svg>
+                    </div>
+                  )
+                ) : (
+                  otherUser?.avatar_path ? (
+                    <Image
+                      src={otherUser.avatar_path}
+                      alt={otherUser.display_name}
+                      width={32}
+                      height={32}
+                      className="rounded-full"
+                    />
+                  ) : (
+                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-200 text-gray-500">
+                      <svg
+                        className="h-5 w-5"
+                        fill="currentColor"
+                        viewBox="0 0 20 20"
+                      >
+                        <path
+                          fillRule="evenodd"
+                          d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z"
+                          clipRule="evenodd"
+                        />
+                      </svg>
+                    </div>
+                  )
+                )}
+              </div>
+              <div className="flex-1">
+                <p className="text-sm font-medium">
+                  {message.sender_id === currentUserId ? 'You' : otherUser?.display_name}
+                </p>
+                <p>{message.content}</p>
+                {message.file && renderFileAttachment(message.file)}
+                {renderReactions(message)}
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* Emoji Picker */}

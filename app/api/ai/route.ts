@@ -8,6 +8,7 @@ import {
 } from '@/app/api/utils/ragUtils.server';
 import { tts } from '@/app/api/utils/openai';
 import { validateRequestBody, handleApiError } from '@/app/api/utils/validation';
+import { Message } from '@/app/components/types';
 
 // Request type definitions
 interface BaseRequest {
@@ -16,7 +17,7 @@ interface BaseRequest {
 
 interface IndexRequest extends BaseRequest {
   action: 'index';
-  messages: any[];  // Type should match your message structure
+  messages: Message[];
 }
 
 interface GenerateRequest extends BaseRequest {
@@ -53,10 +54,12 @@ interface TTSRequest extends BaseRequest {
   text: string;
 }
 
-type AIRequest = IndexRequest | GenerateRequest | GenerateDMRequest | ProcessPDFRequest | SearchRequest | TTSRequest;
+type RequestType = IndexRequest | GenerateRequest | GenerateDMRequest | ProcessPDFRequest | SearchRequest | TTSRequest;
 
 // Action handlers
-const handlers = {
+const handlers: {
+  [K in RequestType['action']]: (request: Extract<RequestType, { action: K }>) => Promise<unknown>
+} = {
   async index(request: IndexRequest) {
     const { messages } = validateRequestBody<Omit<IndexRequest, 'action'>>(request, ['messages']);
     await indexMessages(messages);
@@ -118,8 +121,9 @@ export async function POST(request: Request) {
       throw new Error(`Invalid action: ${action}`);
     }
 
-    const handler = handlers[action as keyof typeof handlers];
-    const result = await handler(body as any); // Safe because we validate inside each handler
+    // Type assertion to ensure type safety while maintaining runtime flexibility
+    const handler = handlers[action] as (request: RequestType) => Promise<unknown>;
+    const result = await handler(body as RequestType);
     return NextResponse.json(result);
   } catch (error) {
     return handleApiError(error);

@@ -529,7 +529,6 @@ export default function ChatRoom({ session }: ChatRoomProps) {
           }
 
           // Generate video if /see was used
-          let videoData;
           if (shouldGenerateVideo) {
             try {
               const videoResponse = await fetch('/api/ai/generate-video', {
@@ -657,7 +656,6 @@ export default function ChatRoom({ session }: ChatRoomProps) {
           }
 
           // Generate video if /see was used
-          let videoData;
           if (shouldGenerateVideo) {
             try {
               const videoResponse = await fetch('/api/ai/generate-video', {

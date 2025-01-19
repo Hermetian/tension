@@ -28,6 +28,7 @@ import SearchBar from './SearchBar';
 import { MessageThread } from './MessageThread';
 import { DMMessageThread } from './DMMessageThread';
 import { useRouter } from 'next/navigation'
+import { VideoPlayer } from './VideoPlayer';
 
 interface ChatRoomProps {
   session: Session
@@ -446,11 +447,12 @@ export default function ChatRoom({ session }: ChatRoomProps) {
 
     let messageContent = newMessage.trim();
     let shouldGenerateAudio = false;
+    let shouldGenerateVideo = false;
     let aiQuery = '';
 
     // Check for commands in any order
     const commands = messageContent.split(' ');
-    const commandSet = new Set(commands.slice(0, 2)); // Only look at first two potential commands
+    const commandSet = new Set(commands.slice(0, 3)); // Look at first three potential commands
 
     // Check for /say command
     if (commandSet.has('/say')) {
@@ -458,9 +460,15 @@ export default function ChatRoom({ session }: ChatRoomProps) {
       messageContent = commands.slice(commandSet.has('/ai') ? 2 : 1).join(' ');
     }
 
+    // Check for /see command
+    if (commandSet.has('/see')) {
+      shouldGenerateVideo = true;
+      messageContent = commands.slice(commandSet.has('/ai') ? 2 : 1).join(' ');
+    }
+
     // Check for /ai command
     if (commandSet.has('/ai')) {
-      aiQuery = commands.slice(commandSet.has('/say') ? 2 : 1).join(' ');
+      aiQuery = commands.slice((commandSet.has('/say') || commandSet.has('/see')) ? 2 : 1).join(' ');
       messageContent = aiQuery;
     }
 
@@ -519,22 +527,76 @@ export default function ChatRoom({ session }: ChatRoomProps) {
               showNotification('Error generating audio: ' + (error instanceof Error ? error.message : 'Unknown error'), 'error');
             }
           }
-          
-          // Send AI response as a message
-          const { error } = await supabase
-            .from('messages')
-            .insert([{
-              content: messageContent,
-              user_id: session.user.id,
-              username: 'AI Assistant',
-              channel_id: chatContext.channel.id,
-              audio: audioData
-            }]);
 
-          if (error) {
-            console.error('Error sending AI response:', error);
-            showNotification('Error sending AI response', 'error');
-            return;
+          // Generate video if /see was used
+          let videoData;
+          if (shouldGenerateVideo) {
+            try {
+              const videoResponse = await fetch('/api/ai/generate-video', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  text: data.response,
+                }),
+              });
+
+              if (!videoResponse.ok) {
+                const errorData = await videoResponse.json();
+                throw new Error(errorData.error || 'Video generation failed');
+              }
+              const videoData = await videoResponse.json();
+              const fileAttachment: FileAttachment = {
+                url: videoData.videoUrl,
+                name: 'AI Generated Video',
+                type: 'video/mp4',
+                size: 0 // Size is unknown until video is downloaded
+              };
+              
+              // Send AI response as a message with video
+              const { error } = await supabase
+                .from('messages')
+                .insert([{
+                  content: messageContent,
+                  user_id: session.user.id,
+                  username: 'AI Assistant',
+                  channel_id: chatContext.channel.id,
+                  audio: audioData,
+                  file: fileAttachment
+                }]);
+
+              if (error) {
+                console.error('Error sending AI response:', error);
+                showNotification('Error sending AI response', 'error');
+                return;
+              }
+
+              setNewMessage('');
+              return;
+            } catch (error) {
+              console.error('Error generating video:', error);
+              showNotification('Error generating video: ' + (error instanceof Error ? error.message : 'Unknown error'), 'error');
+            }
+          }
+          
+          // Send AI response as a message if no video was generated
+          if (!shouldGenerateVideo) {
+            const { error } = await supabase
+              .from('messages')
+              .insert([{
+                content: messageContent,
+                user_id: session.user.id,
+                username: 'AI Assistant',
+                channel_id: chatContext.channel.id,
+                audio: audioData
+              }]);
+
+            if (error) {
+              console.error('Error sending AI response:', error);
+              showNotification('Error sending AI response', 'error');
+              return;
+            }
           }
 
           setNewMessage('');
@@ -593,22 +655,76 @@ export default function ChatRoom({ session }: ChatRoomProps) {
               showNotification('Error generating audio: ' + (error instanceof Error ? error.message : 'Unknown error'), 'error');
             }
           }
-          
-          // Send AI response as a message from the other user
-          const { error } = await supabase
-            .from('dm_messages')
-            .insert({
-              content: messageContent,
-              sender_id: chatContext.otherUser.id,
-              dm_channel_id: chatContext.dmChannel.id,
-              created_at: new Date().toISOString(),
-              audio: audioData
-            });
 
-          if (error) {
-            console.error('Error sending AI response:', error);
-            showNotification('Error sending AI response', 'error');
-            return;
+          // Generate video if /see was used
+          let videoData;
+          if (shouldGenerateVideo) {
+            try {
+              const videoResponse = await fetch('/api/ai/generate-video', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  text: data.response,
+                }),
+              });
+
+              if (!videoResponse.ok) {
+                const errorData = await videoResponse.json();
+                throw new Error(errorData.error || 'Video generation failed');
+              }
+              const videoData = await videoResponse.json();
+              const fileAttachment: FileAttachment = {
+                url: videoData.videoUrl,
+                name: 'AI Generated Video',
+                type: 'video/mp4',
+                size: 0 // Size is unknown until video is downloaded
+              };
+              
+              // Send AI response as a message with video
+              const { error } = await supabase
+                .from('dm_messages')
+                .insert({
+                  content: messageContent,
+                  sender_id: chatContext.otherUser.id,
+                  dm_channel_id: chatContext.dmChannel.id,
+                  created_at: new Date().toISOString(),
+                  audio: audioData,
+                  file: fileAttachment
+                });
+
+              if (error) {
+                console.error('Error sending AI response:', error);
+                showNotification('Error sending AI response', 'error');
+                return;
+              }
+
+              setNewMessage('');
+              return;
+            } catch (error) {
+              console.error('Error generating video:', error);
+              showNotification('Error generating video: ' + (error instanceof Error ? error.message : 'Unknown error'), 'error');
+            }
+          }
+          
+          // Send AI response as a message if no video was generated
+          if (!shouldGenerateVideo) {
+            const { error } = await supabase
+              .from('dm_messages')
+              .insert({
+                content: messageContent,
+                sender_id: chatContext.otherUser.id,
+                dm_channel_id: chatContext.dmChannel.id,
+                created_at: new Date().toISOString(),
+                audio: audioData
+              });
+
+            if (error) {
+              console.error('Error sending AI response:', error);
+              showNotification('Error sending AI response', 'error');
+              return;
+            }
           }
 
           setNewMessage('');
@@ -739,6 +855,37 @@ export default function ChatRoom({ session }: ChatRoomProps) {
           }
         }
 
+        // Generate video if /see was used
+        let fileAttachment;
+        if (shouldGenerateVideo) {
+          try {
+            showNotification('Generating video...', 'info');
+            const videoResponse = await fetch('/api/ai/generate-video', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({ text: messageContent }),
+            });
+            
+            if (!videoResponse.ok) {
+              const errorData = await videoResponse.json();
+              throw new Error(errorData.error || 'Video generation failed');
+            }
+            const videoData = await videoResponse.json();
+            fileAttachment = {
+              url: videoData.videoUrl,
+              name: 'Generated Video',
+              type: 'video/mp4',
+              size: 0 // Size is unknown until video is downloaded
+            };
+            showNotification('Video generated successfully', 'success');
+          } catch (error) {
+            console.error('Error generating video:', error);
+            showNotification('Error generating video: ' + (error instanceof Error ? error.message : 'Unknown error'), 'error');
+          }
+        }
+
         const { data, error } = await supabase
           .from('messages')
           .insert([{
@@ -747,7 +894,8 @@ export default function ChatRoom({ session }: ChatRoomProps) {
             username: userData?.display_name || session.user.email,
             channel_id: chatContext.channel.id,
             parent_message_id: replyingTo,
-            audio: audioData
+            audio: audioData,
+            file: fileAttachment
           }])
           .select();
 
@@ -825,6 +973,39 @@ export default function ChatRoom({ session }: ChatRoomProps) {
             showNotification('Error generating audio', 'error');
           }
         }
+
+        // Generate video if /see was used
+        let fileAttachment;
+        if (shouldGenerateVideo) {
+          try {
+            showNotification('Generating video...', 'info');
+            const videoResponse = await fetch('/api/ai/generate-video', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                text: messageContent,
+              }),
+            });
+
+            if (!videoResponse.ok) {
+              const errorData = await videoResponse.json();
+              throw new Error(errorData.error || 'Video generation failed');
+            }
+            const videoData = await videoResponse.json();
+            fileAttachment = {
+              url: videoData.videoUrl,
+              name: 'Generated Video',
+              type: 'video/mp4',
+              size: 0 // Size is unknown until video is downloaded
+            };
+            showNotification('Video generated successfully', 'success');
+          } catch (error) {
+            console.error('Error generating video:', error);
+            showNotification('Error generating video: ' + (error instanceof Error ? error.message : 'Unknown error'), 'error');
+          }
+        }
     
         // Split into separate update and message operations
         const updateResult = await supabase
@@ -846,7 +1027,8 @@ export default function ChatRoom({ session }: ChatRoomProps) {
             content: messageContent,
             sender_id: session.user.id,
             dm_channel_id: channelCheck.id,
-            audio: audioData
+            audio: audioData,
+            file: fileAttachment
           }])
           .select();
     
@@ -1003,8 +1185,12 @@ export default function ChatRoom({ session }: ChatRoomProps) {
         </a>
       );
     }
+
+    if (file.type === 'video/mp4') {
+      return <VideoPlayer videoUrl={file.url} />;
+    }
   
-    // For non-image files, show a download link
+    // For non-image/video files, show a download link
     return (
       <a 
         href={file.url}

@@ -100,27 +100,6 @@ export async function GET(request: Request) {
   2. `@ai-sdk/[provider]` - Model provider integrations (e.g., OpenAI)
   3. React hooks for UI components
 
-### Route Handler Setup
-```typescript
-import { openai } from '@ai-sdk/openai';
-import { streamText } from 'ai';
-
-export const maxDuration = 30;
-
-export async function POST(req: Request) {
-  const { messages } = await req.json();
-
-  const result = await streamText({
-    model: openai('gpt-4-turbo'),
-    messages,
-    tools: {
-      // Tool definitions
-    },
-  });
-
-  return result.toDataStreamResponse();
-}
-```
 
 ## UI Development
 
@@ -162,3 +141,5 @@ export async function POST(req: Request) {
 - Use React Testing Library
 
 Remember: Prioritize clarity and maintainability while delivering robust, accessible, and performant solutions aligned with the latest React 19, Next.js 15, and Vercel AI SDK features and best practices.
+
+Oh, and don't create twenty functions all named route.ts that are slight variations of each other. If you feel compelled to do so, consider the choices that have led you to this path, go back, and refactor. 
